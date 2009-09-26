@@ -24,13 +24,11 @@
 
 #import "VLCLibrary.h"
 #import "VLCLibVLCBridging.h"
-
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <vlc/vlc.h>
 #include <vlc/libvlc_structures.h>
+#include <vlc/vlc.h>
+#include <vlc_common.h>
+#include <vlc_variables.h>
+#include <../src/control/libvlc_internal.h>
 
 static VLCLibrary * sharedLibrary = nil;
 
@@ -91,9 +89,9 @@ void * DestroySharedLibraryAtExit( void )
         libvlc_exception_init( &ex );
         
         const char * lib_vlc_params[] = { 
-            "-I", "dummy", "--vout=minimal_macosx", 
+            "-I", "dummy", "--vout=opengllayer", 
             "--no-video-title-show", "--no-sout-keep", "--ignore-config",
-			"--opengl-provider=minimal_macosx",
+			"--opengl-provider=opengllayer",
 			"-verbose=-1"
             //, "--control=motion", "--motion-use-rotate", "--video-filter=rotate"
         };
@@ -105,6 +103,13 @@ void * DestroySharedLibraryAtExit( void )
         /*audio = */ [[VLCAudio alloc] initWithLibrary:self];
     }
     return self;
+}
+
+- (void)setDrawable:(id)drawable {
+    libvlc_instance_t *p_instance = (libvlc_instance_t *)instance;
+    var_Create(p_instance->p_libvlc_int, "drawable-gl", VLC_VAR_INTEGER);
+    var_SetInteger(p_instance->p_libvlc_int, "drawable-gl", (int)drawable);
+    //var_Destroy(p_instance->p_libvlc_int, "drawable-gl");
 }
 
 - (void)dealloc 

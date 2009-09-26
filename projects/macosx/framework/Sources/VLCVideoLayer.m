@@ -57,6 +57,13 @@
 @implementation VLCVideoLayer
 @synthesize hasVideo;
 
+- (id)init {
+    if (self = [super init]) {
+        [[VLCLibrary sharedLibrary] setDrawable:self];
+    }
+    return self;
+}
+
 - (BOOL)fillScreen
 {
     return [self.layoutManager fillScreenEntirely];

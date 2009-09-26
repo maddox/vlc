@@ -90,6 +90,7 @@
         [self setStretchesVideo:NO];
         [self setAutoresizesSubviews:YES];
         layoutManager = [[VLCVideoLayoutManager layoutManager] retain];
+        [[VLCLibrary sharedLibrary] setDrawable:self];
     }
     return self;
 }
