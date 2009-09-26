@@ -197,49 +197,7 @@
 	<key>Notifications</key>
 	<array/>
 	<key>OpenEditors</key>
-	<array>
-		<dict>
-			<key>Content</key>
-			<dict>
-				<key>PBXProjectModuleGUID</key>
-				<string>557EAC65106DAC6500FEF106</string>
-				<key>PBXProjectModuleLabel</key>
-				<string>VLCLibrary.m</string>
-				<key>PBXSplitModuleInNavigatorKey</key>
-				<dict>
-					<key>Split0</key>
-					<dict>
-						<key>PBXProjectModuleGUID</key>
-						<string>557EAC66106DAC6500FEF106</string>
-						<key>PBXProjectModuleLabel</key>
-						<string>VLCLibrary.m</string>
-						<key>_historyCapacity</key>
-						<integer>0</integer>
-						<key>bookmark</key>
-						<string>557EAC8B106DAF1000FEF106</string>
-						<key>history</key>
-						<array>
-							<string>557EAC84106DAECE00FEF106</string>
-							<string>557EAC76106DAD3D00FEF106</string>
-						</array>
-					</dict>
-					<key>SplitCount</key>
-					<string>1</string>
-				</dict>
-				<key>StatusBarVisibility</key>
-				<true/>
-			</dict>
-			<key>Geometry</key>
-			<dict>
-				<key>Frame</key>
-				<string>{{0, 20}, {1106, 908}}</string>
-				<key>PBXModuleWindowStatusBarHidden2</key>
-				<false/>
-				<key>RubberWindowFrame</key>
-				<string>812 176 1106 949 0 0 1920 1178 </string>
-			</dict>
-		</dict>
-	</array>
+	<array/>
 	<key>PerspectiveWidths</key>
 	<array>
 		<integer>1127</integer>
@@ -324,13 +282,13 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>13</integer>
+									<integer>10</integer>
 									<integer>2</integer>
 									<integer>0</integer>
 								</array>
 							</array>
 							<key>PBXSmartGroupTreeModuleOutlineStateVisibleRectKey</key>
-							<string>{{0, 1}, {304, 635}}</string>
+							<string>{{0, 33}, {304, 635}}</string>
 						</dict>
 						<key>PBXTopSmartGroupGIDs</key>
 						<array/>
@@ -347,7 +305,7 @@
 							<real>304</real>
 						</array>
 						<key>RubberWindowFrame</key>
-						<string>824 484 1087 694 0 0 1920 1178 </string>
+						<string>747 484 1087 694 0 0 1920 1178 </string>
 					</dict>
 					<key>Module</key>
 					<string>PBXSmartGroupTreeModule</string>
@@ -386,7 +344,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {761, 0}}</string>
 								<key>RubberWindowFrame</key>
-								<string>824 484 1087 694 0 0 1920 1178 </string>
+								<string>747 484 1087 694 0 0 1920 1178 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -415,6 +373,8 @@
 									<string>XCDetailModule</string>
 								</dict>
 								<dict>
+									<key>BecomeActive</key>
+									<true/>
 									<key>ContentConfiguration</key>
 									<dict>
 										<key>PBXProjectModuleGUID</key>
@@ -426,6 +386,8 @@
 									<dict>
 										<key>Frame</key>
 										<string>{{10, 27}, {761, 621}}</string>
+										<key>RubberWindowFrame</key>
+										<string>747 484 1087 694 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>PBXProjectFindModule</string>
@@ -464,8 +426,6 @@
 									<dict>
 										<key>Frame</key>
 										<string>{{10, 27}, {761, 621}}</string>
-										<key>RubberWindowFrame</key>
-										<string>824 484 1087 694 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>PBXBuildResultsModule</string>
@@ -686,10 +646,9 @@
 	<key>WindowOrderList</key>
 	<array>
 		<string>/Users/mschrag/Documents/Developer/vlc/projects/macosx/framework/VLCKit.xcodeproj</string>
-		<string>557EAC65106DAC6500FEF106</string>
 	</array>
 	<key>WindowString</key>
-	<string>824 484 1087 694 0 0 1920 1178 </string>
+	<string>747 484 1087 694 0 0 1920 1178 </string>
 	<key>WindowToolsV3</key>
 	<array>
 		<dict>

@@ -62,6 +62,4 @@ extern void * DestroySharedLibraryAtExit( void ) __attribute__((destructor));
  * \return The library's shared audio instance.
  */
 @property (readonly) VLCAudio * audio;
-
-- (void)setDrawable:(id)drawable;
 @end

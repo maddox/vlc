@@ -71,6 +71,8 @@
 #   define GL_CLAMP_TO_EDGE 0x812F
 #endif
 
+#define BUFFER_COUNT 2
+
 @interface VLCVideoView : NSObject
 - (void)addVoutLayer:(CALayer *)layer;
 @end
@@ -115,7 +117,7 @@ struct vout_sys_t
 {
     vout_thread_t * p_vout;
 
-    uint8_t    *pp_buffer[2]; /* one last rendered, one to be rendered */
+    uint8_t    *pp_buffer[BUFFER_COUNT]; /* one last rendered, one to be rendered */
     int         i_index;
     bool  b_frame_available;
     
@@ -123,7 +125,7 @@ struct vout_sys_t
 
     int         i_tex_width;
     int         i_tex_height;
-    GLuint      p_textures[2];
+    GLuint      p_textures[BUFFER_COUNT];
 
     NSAutoreleasePool *autorealease_pool;
     VLCVoutLayer * o_layer;
@@ -196,7 +198,7 @@ static int Init( vout_thread_t *p_vout )
     /* We know the chroma, allocate two buffer which will be used
      * directly by the decoder */
     int i;
-    for( i = 0; i < 2; i++ )
+    for( i = 0; i < BUFFER_COUNT; i++ )
     {
         p_sys->pp_buffer[i] =
             malloc( p_sys->i_tex_width * p_sys->i_tex_height * i_pixel_pitch );
@@ -247,8 +249,9 @@ static void End( vout_thread_t *p_vout )
     [p_sys->autorealease_pool release];
 
     /* Free the texture buffer*/
-    free( p_sys->pp_buffer[0] );
-    free( p_sys->pp_buffer[1] );
+    for (int i = 0; i < BUFFER_COUNT; i ++) {
+        free( p_sys->pp_buffer[i] );
+    }
 }
 
 /*****************************************************************************
@@ -289,31 +292,23 @@ static void Render( vout_thread_t *p_vout, picture_t *p_pic )
         {
             CGLLockContext(p_sys->glContext);
             CGLSetCurrentContext(p_sys->glContext);
-            int i_new_index;
-            i_new_index = ( p_sys->i_index + 1 ) & 1;
-
 
             /* Update the texture */
-            glBindTexture( VLCGL_TARGET, p_sys->p_textures[i_new_index] );
+            glBindTexture( VLCGL_TARGET, p_sys->p_textures[p_sys->i_index] );
             glTexSubImage2D( VLCGL_TARGET, 0, 0, 0,
                          p_vout->fmt_out.i_width,
                          p_vout->fmt_out.i_height,
-                         VLCGL_FORMAT, VLCGL_TYPE, p_sys->pp_buffer[i_new_index] );
+                         VLCGL_FORMAT, VLCGL_TYPE, p_sys->pp_buffer[p_sys->i_index] );
 
-            /* Bind to the previous texture for drawing */
-            glBindTexture( VLCGL_TARGET, p_sys->p_textures[p_sys->i_index] );
-
-            /* Switch buffers */
-            p_sys->i_index = i_new_index;
-            p_pic->p->p_pixels = p_sys->pp_buffer[p_sys->i_index];
             CGLUnlockContext(p_sys->glContext);
             
+            p_pic->p->p_pixels = p_vout->p_sys->pp_buffer[(p_sys->i_index + 1) % BUFFER_COUNT];
             p_sys->b_frame_available = true;
         }
     }
 
     /* Give a buffer where the image will be rendered */
-    p_pic->p->p_pixels = p_sys->pp_buffer[p_sys->i_index];
+    //p_pic->p->p_pixels = p_sys->pp_buffer[p_sys->i_index];
 }
 
 /*****************************************************************************
@@ -321,10 +316,13 @@ static void Render( vout_thread_t *p_vout, picture_t *p_pic )
  *****************************************************************************/
 static void DisplayVideo( vout_thread_t *p_vout, picture_t *p_pic )
 {
+    /*
     vout_sys_t *p_sys = p_vout->p_sys;
     
+    NSLog(@"displayVideo");
     [p_sys->o_layer performSelectorOnMainThread:@selector(display)
                     withObject:nil waitUntilDone:YES];
+    */
 }
 
 /*****************************************************************************
@@ -347,10 +345,10 @@ static int InitTextures( vout_thread_t *p_vout )
     vout_sys_t *p_sys = p_vout->p_sys;
     int i_index;
 
-    glDeleteTextures( 2, p_sys->p_textures );
-    glGenTextures( 2, p_sys->p_textures );
+    glDeleteTextures( BUFFER_COUNT, p_sys->p_textures );
+    glGenTextures( BUFFER_COUNT, p_sys->p_textures );
 
-    for( i_index = 0; i_index < 2; i_index++ )
+    for( i_index = 0; i_index < BUFFER_COUNT; i_index++ )
     {
         glBindTexture( VLCGL_TARGET, p_sys->p_textures[i_index] );
 
@@ -408,7 +406,7 @@ static int InitTextures( vout_thread_t *p_vout )
     if( me )
     {
         me->p_vout = _p_vout;
-        me.asynchronous = NO;
+        me.asynchronous = YES;
         me.bounds = CGRectMake( 0.0, 0.0, 
                                 (float)_p_vout->fmt_in.i_visible_width * _p_vout->fmt_in.i_sar_num,
                                 (float)_p_vout->fmt_in.i_visible_height * _p_vout->fmt_in.i_sar_den );
@@ -419,7 +417,8 @@ static int InitTextures( vout_thread_t *p_vout )
 - (BOOL)canDrawInCGLContext:(CGLContextObj)glContext pixelFormat:(CGLPixelFormatObj)pixelFormat forLayerTime:(CFTimeInterval)timeInterval displayTime:(const CVTimeStamp *)timeStamp
 {
     /* Only draw the frame if we have a frame that was previously rendered */
- 	return p_vout->p_sys->b_frame_available; // Flag is cleared by drawInCGLContext:pixelFormat:forLayerTime:displayTime:
+ 	BOOL canDrawInCGLContext = p_vout->p_sys->b_frame_available; // Flag is cleared by drawInCGLContext:pixelFormat:forLayerTime:displayTime:
+    return canDrawInCGLContext;
 }
 
 - (void)drawInCGLContext:(CGLContextObj)glContext pixelFormat:(CGLPixelFormatObj)pixelFormat forLayerTime:(CFTimeInterval)timeInterval displayTime:(const CVTimeStamp *)timeStamp
@@ -427,6 +426,9 @@ static int InitTextures( vout_thread_t *p_vout )
     CGLLockContext( glContext );
     CGLSetCurrentContext( glContext );
 
+    /* Bind to the previous texture for drawing */
+    glBindTexture( VLCGL_TARGET, p_vout->p_sys->p_textures[p_vout->p_sys->i_index] );
+    
     float f_width, f_height, f_x, f_y;
 
     f_x = (float)p_vout->fmt_out.i_x_offset;
@@ -437,6 +439,7 @@ static int InitTextures( vout_thread_t *p_vout )
                (float)p_vout->fmt_out.i_visible_height;
 
     glClear( GL_COLOR_BUFFER_BIT );
+    //glClearColor(1.0, 0.0, 0.0, 1.0);
 
     glEnable( VLCGL_TARGET );
     glBegin( GL_POLYGON );
@@ -449,6 +452,9 @@ static int InitTextures( vout_thread_t *p_vout )
     glDisable( VLCGL_TARGET );
 
     glFlush();
+
+    p_vout->p_sys->i_index = ( p_vout->p_sys->i_index + 1 ) % BUFFER_COUNT;
+    p_vout->p_sys->b_frame_available = false;
 
     CGLUnlockContext( glContext );
 }
@@ -468,6 +474,8 @@ static int InitTextures( vout_thread_t *p_vout )
     GLint params = 1;
     CGLSetParameter( CGLGetCurrentContext(), kCGLCPSwapInterval,
                      &params );
+    
+    CGLEnable(CGLGetCurrentContext(), kCGLCEMPEngine);
 
     InitTextures( p_vout );
 
@@ -497,7 +505,7 @@ static int InitTextures( vout_thread_t *p_vout )
     CGLLockContext( glContext );
     CGLSetCurrentContext( glContext );
 
-    glDeleteTextures( 2, p_vout->p_sys->p_textures );
+    glDeleteTextures( BUFFER_COUNT, p_vout->p_sys->p_textures );
 
     CGLUnlockContext( glContext );
 }

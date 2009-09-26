@@ -26,9 +26,6 @@
 #import "VLCLibVLCBridging.h"
 #include <vlc/libvlc_structures.h>
 #include <vlc/vlc.h>
-#include <vlc_common.h>
-#include <vlc_variables.h>
-#include <../src/control/libvlc_internal.h>
 
 static VLCLibrary * sharedLibrary = nil;
 
@@ -103,13 +100,6 @@ void * DestroySharedLibraryAtExit( void )
         /*audio = */ [[VLCAudio alloc] initWithLibrary:self];
     }
     return self;
-}
-
-- (void)setDrawable:(id)drawable {
-    libvlc_instance_t *p_instance = (libvlc_instance_t *)instance;
-    var_Create(p_instance->p_libvlc_int, "drawable-gl", VLC_VAR_INTEGER);
-    var_SetInteger(p_instance->p_libvlc_int, "drawable-gl", (int)drawable);
-    //var_Destroy(p_instance->p_libvlc_int, "drawable-gl");
 }
 
 - (void)dealloc 
