@@ -167,6 +167,7 @@ static int CreateVout( vlc_object_t *p_this )
  *****************************************************************************/
 static int Init( vout_thread_t *p_vout )
 {
+    NSLog(@"opengllayer.Init");
     vout_sys_t *p_sys = p_vout->p_sys;
     int i_pixel_pitch;
     vlc_value_t val;
@@ -189,7 +190,8 @@ static int Init( vout_thread_t *p_vout )
     vlc_value_t value_drawable;
     var_Create( p_vout, "drawable-gl", VLC_VAR_DOINHERIT );
     var_Get( p_vout, "drawable-gl", &value_drawable );
-
+    NSLog(@"opengllayer.Init: drawable-gl = %d", value_drawable.i_int);
+    
     p_vout->p_sys->o_cocoa_container = (id) value_drawable.i_int;
     
     p_vout->fmt_out = p_vout->fmt_in;
@@ -290,6 +292,7 @@ static void Render( vout_thread_t *p_vout, picture_t *p_pic )
     {
         if( p_sys->glContext )
         {
+            NSLog(@"Render %d", p_sys->i_index);
             CGLLockContext(p_sys->glContext);
             CGLSetCurrentContext(p_sys->glContext);
 
@@ -426,6 +429,7 @@ static int InitTextures( vout_thread_t *p_vout )
     CGLLockContext( glContext );
     CGLSetCurrentContext( glContext );
 
+    NSLog(@"drawInCGLContext %d", p_vout->p_sys->i_index);
     /* Bind to the previous texture for drawing */
     glBindTexture( VLCGL_TARGET, p_vout->p_sys->p_textures[p_vout->p_sys->i_index] );
     

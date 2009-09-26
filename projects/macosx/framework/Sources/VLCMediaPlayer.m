@@ -165,6 +165,7 @@ static void HandleMediaInstanceStateChanged(const libvlc_event_t * event, void *
 /* Contructor */
 - (id)init
 {
+    NSLog(@"VLCMediaPlayer.init");
     return [self initWithDrawable:nil];
 }
 
@@ -235,10 +236,12 @@ static void HandleMediaInstanceStateChanged(const libvlc_event_t * event, void *
     libvlc_exception_init( &ex );
     libvlc_media_player_set_nsobject(instance, aDrawable, &ex);
 
+    NSLog(@"VLCMediaPlayer.setDrawable: %@, %d", aDrawable, aDrawable);
     if (aDrawable) {
         libvlc_instance_t *p_instance = (libvlc_instance_t *)[VLCLibrary sharedInstance];
         var_Create(p_instance->p_libvlc_int, "drawable-gl", VLC_VAR_INTEGER);
         var_SetInteger(p_instance->p_libvlc_int, "drawable-gl", (int)aDrawable);
+        NSLog(@"VLCMediaPlayer.setDrawable: reading drawable-gl back out: %d", var_GetInteger(p_instance->p_libvlc_int, "drawable-gl"));
     }
     
     catch_exception( &ex );

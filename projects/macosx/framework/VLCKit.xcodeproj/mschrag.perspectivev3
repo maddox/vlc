@@ -280,20 +280,18 @@
 								<string>034768DFFF38A50411DB9C8B</string>
 								<string>8DC2EF5B0486A6940098B216</string>
 								<string>1C37FBAC04509CD000000102</string>
-								<string>557EADE9106DEA3100FEF106</string>
-								<string>557EADEA106DEA3100FEF106</string>
-								<string>557EADEB106DEA3100FEF106</string>
 								<string>1C37FAAC04509CD000000102</string>
 							</array>
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>37</integer>
-									<integer>35</integer>
+									<integer>10</integer>
+									<integer>2</integer>
+									<integer>0</integer>
 								</array>
 							</array>
 							<key>PBXSmartGroupTreeModuleOutlineStateVisibleRectKey</key>
-							<string>{{0, 219}, {304, 635}}</string>
+							<string>{{0, 0}, {304, 635}}</string>
 						</dict>
 						<key>PBXTopSmartGroupGIDs</key>
 						<array/>
@@ -310,7 +308,7 @@
 							<real>304</real>
 						</array>
 						<key>RubberWindowFrame</key>
-						<string>747 484 1087 694 0 0 1920 1178 </string>
+						<string>546 449 1087 694 0 0 1920 1178 </string>
 					</dict>
 					<key>Module</key>
 					<string>PBXSmartGroupTreeModule</string>
@@ -349,7 +347,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {761, 0}}</string>
 								<key>RubberWindowFrame</key>
-								<string>747 484 1087 694 0 0 1920 1178 </string>
+								<string>546 449 1087 694 0 0 1920 1178 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -428,7 +426,7 @@
 										<key>Frame</key>
 										<string>{{10, 27}, {761, 621}}</string>
 										<key>RubberWindowFrame</key>
-										<string>747 484 1087 694 0 0 1920 1178 </string>
+										<string>546 449 1087 694 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>PBXBuildResultsModule</string>
@@ -456,11 +454,11 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>557EABFD106DA6C300FEF106</string>
+				<string>5546CD95106DF7FB000DAEA3</string>
 				<string>1CA23ED40692098700951B8B</string>
-				<string>557EABFE106DA6C300FEF106</string>
+				<string>5546CD96106DF7FB000DAEA3</string>
 				<string>55572D9D1067444F00DAD98A</string>
-				<string>557EABFF106DA6C300FEF106</string>
+				<string>5546CD97106DF7FB000DAEA3</string>
 				<string>1CA23EDF0692099D00951B8B</string>
 				<string>1CA23EE00692099D00951B8B</string>
 				<string>1CA23EE10692099D00951B8B</string>
@@ -648,10 +646,11 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
+		<string>5546CE02106DFC5E000DAEA3</string>
 		<string>/Users/mschrag/Documents/Developer/vlc/projects/macosx/framework/VLCKit.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
-	<string>747 484 1087 694 0 0 1920 1178 </string>
+	<string>546 449 1087 694 0 0 1920 1178 </string>
 	<key>WindowToolsV3</key>
 	<array>
 		<dict>

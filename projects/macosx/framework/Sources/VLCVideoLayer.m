@@ -82,6 +82,7 @@
  */
 - (void)addVoutLayer:(CALayer *)voutLayer
 {
+    NSLog(@"VLCVideoLayer.addVoutLayer: %@", voutLayer);
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
  
