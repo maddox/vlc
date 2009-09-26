@@ -413,6 +413,7 @@
 				8DC2EF500486A6940098B216 /* Headers */,
 				8DC2EF520486A6940098B216 /* Resources */,
 				8DC2EF560486A6940098B216 /* Frameworks */,
+				55CC4238106E7FC300A4258F /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -459,6 +460,19 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		55CC4238106E7FC300A4258F /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "install_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlccore.4.dylib\" \"@loader_path/lib/libvlccore.4.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.5.dylib\" \"@loader_path/lib/libvlc.5.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.dylib\" \"@loader_path/lib/libvlc.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit";
+		};
 		631A90420D5A007D0014A2CE /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -634,7 +648,7 @@
 				PRIVATE_HEADERS_FOLDER_PATH = "$(CONTENTS_FOLDER_PATH)/PrivateHeaders";
 				PRODUCT_NAME = VLCKit;
 				SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = YES;
-				SDKROOT = macosx10.6;
+				SDKROOT = macosx10.5;
 				VLC_BUILD_DIR = "$(SYMROOT)/vlc_build_dir";
 				VLC_FRAMEWORK = "$(TARGET_BUILD_DIR)/$(PROJECT_NAME).framework";
 				VLC_SRC_DIR = ../../..;

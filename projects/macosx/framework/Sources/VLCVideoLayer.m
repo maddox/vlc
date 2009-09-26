@@ -83,7 +83,7 @@
 - (void)addVoutLayer:(CALayer *)voutLayer
 {
     [CATransaction begin];
-    [CATransaction setDisableActions:YES];
+    //[CATransaction setDisableActions:YES];
  
     voutLayer.name = @"vlcopengllayer";
     
@@ -105,7 +105,7 @@
 - (void)removeVoutLayer:(CALayer*)voutLayer
 {
     [CATransaction begin];
-    [CATransaction setDisableActions:YES];
+    //[CATransaction setDisableActions:YES];
     [voutLayer removeFromSuperlayer];
     [CATransaction commit];
     
