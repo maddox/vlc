@@ -1,0 +1,16 @@
+cd extras/contrib
+./bootstrap
+make
+
+cd ../..
+./boostrap
+export CC=/Developer/usr/bin/llvm-gcc-4.2
+export CXX=/Developer/usr/bin/llvm-g++-4.2
+export OBJC=/Developer/usr/bin/llvm-gcc-4.2
+export CFLAGS="-arch i386 -m32"
+export CXXFLAGS="-arch i386 -m32"
+export OBJCFLAGS="-arch i386 -m32"
+export LDFLAGS="-arch i386"
+./configure
+make
+make VLC-release.app

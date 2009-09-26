@@ -471,7 +471,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "install_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlccore.4.dylib\" \"@loader_path/lib/libvlccore.4.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.5.dylib\" \"@loader_path/lib/libvlc.5.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.dylib\" \"@loader_path/lib/libvlc.dylib\" build/Debug/VLCKit.framework/Versions/A/VLCKit";
+			shellScript = "install_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlccore.4.dylib\" \"@loader_path/lib/libvlccore.4.dylib\" ${TARGET_BUILD_DIR}/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.5.dylib\" \"@loader_path/lib/libvlc.5.dylib\" ${TARGET_BUILD_DIR}/VLCKit.framework/Versions/A/VLCKit\n\ninstall_name_tool -change \"/Users/mschrag/Documents/Developer/vlc/vlc_install_dir/lib/libvlc.dylib\" \"@loader_path/lib/libvlc.dylib\" ${TARGET_BUILD_DIR}/VLCKit.framework/Versions/A/VLCKit";
 		};
 		631A90420D5A007D0014A2CE /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -616,6 +616,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				FRAMEWORK_VERSION = A;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_ENABLE_FIX_AND_CONTINUE = YES;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
@@ -660,9 +661,11 @@
 		1DEB91AF08733DA50010E9CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				FRAMEWORK_VERSION = A;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
 				GCC_MODEL_TUNING = "";
@@ -682,12 +685,13 @@
 					"$(VLC_FRAMEWORK)/lib",
 					"\"$(SRCROOT)/../../../vlc_install_dir/lib\"",
 				);
-				ONLY_ACTIVE_ARCH = YES;
+				ONLY_ACTIVE_ARCH = NO;
 				OTHER_LDFLAGS = (
 					"-single_module",
 					"-read_only_relocs",
 					suppress,
 					"-lvlc",
+					"-lvlccore",
 					"$(LD_FLAGS_LIBINTL)",
 					"$(LD_FLAGS_LIBVLC)",
 					"$(LD_FLAGS_LIBVLC_CONTROL)",
@@ -695,7 +699,8 @@
 				PRIVATE_HEADERS_FOLDER_PATH = "$(CONTENTS_FOLDER_PATH)/PrivateHeaders";
 				PRODUCT_NAME = VLCKit;
 				SCAN_ALL_SOURCE_FILES_FOR_INCLUDES = YES;
-				SDKROOT = macosx10.6;
+				SDKROOT = macosx10.5;
+				VALID_ARCHS = i386;
 				VLC_BUILD_DIR = "$(VLC_SRC_DIR)";
 				VLC_FRAMEWORK = "$(TARGET_BUILD_DIR)/$(PROJECT_NAME).framework";
 				VLC_SRC_DIR = ../../..;
@@ -713,21 +718,23 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				PREBINDING = NO;
-				SDKROOT = macosx10.6;
+				SDKROOT = macosx10.5;
+				VALID_ARCHS = "i386 x86_64";
 			};
 			name = Debug;
 		};
 		1DEB91B308733DA50010E9CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
-				GCC_C_LANGUAGE_STANDARD = c99;
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_GC = supported;
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				PREBINDING = NO;
-				SDKROOT = macosx10.6;
+				SDKROOT = macosx10.5;
+				VALID_ARCHS = i386;
 			};
 			name = Release;
 		};

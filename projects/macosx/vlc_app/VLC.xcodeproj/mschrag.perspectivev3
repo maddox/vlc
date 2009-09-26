@@ -197,48 +197,7 @@
 	<key>Notifications</key>
 	<array/>
 	<key>OpenEditors</key>
-	<array>
-		<dict>
-			<key>Content</key>
-			<dict>
-				<key>PBXProjectModuleGUID</key>
-				<string>555A34D410685ECB00345681</string>
-				<key>PBXProjectModuleLabel</key>
-				<string>VLCBrowsableVideoView.m</string>
-				<key>PBXSplitModuleInNavigatorKey</key>
-				<dict>
-					<key>Split0</key>
-					<dict>
-						<key>PBXProjectModuleGUID</key>
-						<string>555A34D510685ECB00345681</string>
-						<key>PBXProjectModuleLabel</key>
-						<string>VLCBrowsableVideoView.m</string>
-						<key>_historyCapacity</key>
-						<integer>0</integer>
-						<key>bookmark</key>
-						<string>555A34D610685ECB00345681</string>
-						<key>history</key>
-						<array>
-							<string>555A34D310685EB200345681</string>
-						</array>
-					</dict>
-					<key>SplitCount</key>
-					<string>1</string>
-				</dict>
-				<key>StatusBarVisibility</key>
-				<true/>
-			</dict>
-			<key>Geometry</key>
-			<dict>
-				<key>Frame</key>
-				<string>{{0, 20}, {1467, 932}}</string>
-				<key>PBXModuleWindowStatusBarHidden2</key>
-				<false/>
-				<key>RubberWindowFrame</key>
-				<string>368 67 1467 973 0 0 1920 1178 </string>
-			</dict>
-		</dict>
-	</array>
+	<array/>
 	<key>PerspectiveWidths</key>
 	<array>
 		<integer>-1</integer>
@@ -346,7 +305,7 @@
 							<real>294</real>
 						</array>
 						<key>RubberWindowFrame</key>
-						<string>470 292 1263 833 0 0 1920 1178 </string>
+						<string>518 345 1263 833 0 0 1920 1178 </string>
 					</dict>
 					<key>Module</key>
 					<string>PBXSmartGroupTreeModule</string>
@@ -385,7 +344,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {947, 0}}</string>
 								<key>RubberWindowFrame</key>
-								<string>470 292 1263 833 0 0 1920 1178 </string>
+								<string>518 345 1263 833 0 0 1920 1178 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -408,7 +367,7 @@
 									<key>GeometryConfiguration</key>
 									<dict>
 										<key>Frame</key>
-										<string>{{10, 27}, {603, 414}}</string>
+										<string>{{10, 27}, {947, 760}}</string>
 									</dict>
 									<key>Module</key>
 									<string>XCDetailModule</string>
@@ -464,7 +423,7 @@
 										<key>Frame</key>
 										<string>{{10, 27}, {947, 760}}</string>
 										<key>RubberWindowFrame</key>
-										<string>470 292 1263 833 0 0 1920 1178 </string>
+										<string>518 345 1263 833 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>PBXBuildResultsModule</string>
@@ -492,11 +451,11 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>555A349D10685CC700345681</string>
+				<string>55CC42BC106E8B5100A4258F</string>
 				<string>1CA23ED40692098700951B8B</string>
-				<string>555A349E10685CC700345681</string>
+				<string>55CC42BD106E8B5100A4258F</string>
 				<string>555A349B10685CC700345681</string>
-				<string>555A349F10685CC700345681</string>
+				<string>55CC42BE106E8B5100A4258F</string>
 				<string>1CA23EDF0692099D00951B8B</string>
 				<string>1CA23EE00692099D00951B8B</string>
 				<string>1CA23EE10692099D00951B8B</string>
@@ -666,11 +625,10 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>555A34D410685ECB00345681</string>
 		<string>/Users/mschrag/Documents/Developer/vlc/projects/macosx/vlc_app/VLC.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
-	<string>470 292 1263 833 0 0 1920 1178 </string>
+	<string>518 345 1263 833 0 0 1920 1178 </string>
 	<key>WindowToolsV3</key>
 	<array>
 		<dict>
