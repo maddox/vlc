@@ -197,48 +197,7 @@
 	<key>Notifications</key>
 	<array/>
 	<key>OpenEditors</key>
-	<array>
-		<dict>
-			<key>Content</key>
-			<dict>
-				<key>PBXProjectModuleGUID</key>
-				<string>5511BE4910803FE500C659F0</string>
-				<key>PBXProjectModuleLabel</key>
-				<string>VLCLibrary.m</string>
-				<key>PBXSplitModuleInNavigatorKey</key>
-				<dict>
-					<key>Split0</key>
-					<dict>
-						<key>PBXProjectModuleGUID</key>
-						<string>5511BE4A10803FE500C659F0</string>
-						<key>PBXProjectModuleLabel</key>
-						<string>VLCLibrary.m</string>
-						<key>_historyCapacity</key>
-						<integer>0</integer>
-						<key>bookmark</key>
-						<string>5511BEB31080440200C659F0</string>
-						<key>history</key>
-						<array>
-							<string>5511BE4510803FE100C659F0</string>
-						</array>
-					</dict>
-					<key>SplitCount</key>
-					<string>1</string>
-				</dict>
-				<key>StatusBarVisibility</key>
-				<true/>
-			</dict>
-			<key>Geometry</key>
-			<dict>
-				<key>Frame</key>
-				<string>{{0, 20}, {1106, 908}}</string>
-				<key>PBXModuleWindowStatusBarHidden2</key>
-				<false/>
-				<key>RubberWindowFrame</key>
-				<string>654 202 1106 949 0 0 1920 1178 </string>
-			</dict>
-		</dict>
-	</array>
+	<array/>
 	<key>PerspectiveWidths</key>
 	<array>
 		<integer>1127</integer>
@@ -273,6 +232,8 @@
 			<key>Layout</key>
 			<array>
 				<dict>
+					<key>BecomeActive</key>
+					<true/>
 					<key>ContentConfiguration</key>
 					<dict>
 						<key>PBXBottomSmartGroupGIDs</key>
@@ -323,7 +284,7 @@
 							<key>PBXSmartGroupTreeModuleOutlineStateSelectionKey</key>
 							<array>
 								<array>
-									<integer>4</integer>
+									<integer>15</integer>
 									<integer>2</integer>
 									<integer>0</integer>
 								</array>
@@ -346,7 +307,7 @@
 							<real>304</real>
 						</array>
 						<key>RubberWindowFrame</key>
-						<string>185 95 1087 694 0 0 1920 1178 </string>
+						<string>347 -343 1087 694 0 0 1920 1178 </string>
 					</dict>
 					<key>Module</key>
 					<string>PBXSmartGroupTreeModule</string>
@@ -385,7 +346,7 @@
 								<key>Frame</key>
 								<string>{{0, 0}, {761, 0}}</string>
 								<key>RubberWindowFrame</key>
-								<string>185 95 1087 694 0 0 1920 1178 </string>
+								<string>347 -343 1087 694 0 0 1920 1178 </string>
 							</dict>
 							<key>Module</key>
 							<string>PBXNavigatorGroup</string>
@@ -409,13 +370,13 @@
 									<dict>
 										<key>Frame</key>
 										<string>{{10, 27}, {761, 621}}</string>
+										<key>RubberWindowFrame</key>
+										<string>347 -343 1087 694 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>XCDetailModule</string>
 								</dict>
 								<dict>
-									<key>BecomeActive</key>
-									<true/>
 									<key>ContentConfiguration</key>
 									<dict>
 										<key>PBXProjectModuleGUID</key>
@@ -427,8 +388,6 @@
 									<dict>
 										<key>Frame</key>
 										<string>{{10, 27}, {761, 621}}</string>
-										<key>RubberWindowFrame</key>
-										<string>185 95 1087 694 0 0 1920 1178 </string>
 									</dict>
 									<key>Module</key>
 									<string>PBXProjectFindModule</string>
@@ -494,11 +453,11 @@
 			</array>
 			<key>TableOfContents</key>
 			<array>
-				<string>5511BE4610803FE500C659F0</string>
+				<string>557E56701080D2BE00EA5E7B</string>
 				<string>1CA23ED40692098700951B8B</string>
-				<string>5511BE4710803FE500C659F0</string>
+				<string>557E56711080D2BE00EA5E7B</string>
 				<string>55572D9D1067444F00DAD98A</string>
-				<string>5511BE4810803FE500C659F0</string>
+				<string>557E56721080D2BE00EA5E7B</string>
 				<string>1CA23EDF0692099D00951B8B</string>
 				<string>1CA23EE00692099D00951B8B</string>
 				<string>1CA23EE10692099D00951B8B</string>
@@ -686,12 +645,10 @@
 	<integer>5</integer>
 	<key>WindowOrderList</key>
 	<array>
-		<string>5511BEB41080440200C659F0</string>
-		<string>5511BE4910803FE500C659F0</string>
 		<string>/Users/mschrag/Documents/Developer/vlc/projects/macosx/framework/VLCKit.xcodeproj</string>
 	</array>
 	<key>WindowString</key>
-	<string>185 95 1087 694 0 0 1920 1178 </string>
+	<string>347 -343 1087 694 0 0 1920 1178 </string>
 	<key>WindowToolsV3</key>
 	<array>
 		<dict>
