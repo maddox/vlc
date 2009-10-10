@@ -1,4 +1,5 @@
 cd extras/contrib
+rm -rf tmp
 ./bootstrap
 make
 

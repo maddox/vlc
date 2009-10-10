@@ -242,7 +242,7 @@ static void End( vout_thread_t *p_vout )
 
     p_vout->p_sys->b_frame_available = false;
 
-    [p_vout->p_sys->o_cocoa_container performSelectorOnMainThread:@selector(removeVoutLayer:) withObject:p_vout->p_sys->o_layer waitUntilDone:YES];
+    [p_vout->p_sys->o_cocoa_container performSelectorOnMainThread:@selector(removeVoutLayer:) withObject:p_vout->p_sys->o_layer waitUntilDone:NO];
 
     // Should be done automatically
     [p_sys->o_layer release];
@@ -319,7 +319,6 @@ static void DisplayVideo( vout_thread_t *p_vout, picture_t *p_pic )
     /*
     vout_sys_t *p_sys = p_vout->p_sys;
     
-    NSLog(@"displayVideo");
     [p_sys->o_layer performSelectorOnMainThread:@selector(display)
                     withObject:nil waitUntilDone:YES];
     */
