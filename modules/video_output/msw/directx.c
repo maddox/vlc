@@ -218,6 +218,7 @@ static int OpenVideo( vlc_object_t *p_this )
     p_vout->p_sys = calloc( 1, sizeof( vout_sys_t ) );
     if( p_vout->p_sys == NULL )
         return VLC_ENOMEM;
+    vlc_mutex_init( &p_vout->p_sys->lock );
 
     /* Initialisations */
     p_vout->pf_init = Init;
@@ -385,10 +386,18 @@ static int Init( vout_thread_t *p_vout )
         NewPictureVec( p_vout, p_vout->p_picture );
     }
 
-    /* Change the window title bar text */
-    PostMessage( p_vout->p_sys->hwnd, WM_VLC_CHANGE_TEXT, 0, 0 );
-
     p_vout->fmt_out.i_chroma = p_vout->output.i_chroma;
+
+    /* Change the window title bar text */
+    const char *psz_fallback;
+    if( p_vout->p_sys->b_using_overlay )
+        psz_fallback = VOUT_TITLE " (hardware YUV overlay DirectX output)";
+    else if( p_vout->p_sys->b_hw_yuv )
+        psz_fallback = VOUT_TITLE " (hardware YUV DirectX output)";
+    else
+        psz_fallback = VOUT_TITLE " (software RGB DirectX output)";
+    EventThreadUpdateTitle( p_vout->p_sys->p_event, psz_fallback );
+
     return VLC_SUCCESS;
 }
 
@@ -423,6 +432,7 @@ static void CloseVideo( vlc_object_t *p_this )
 
     CommonClean( p_vout );
 
+    vlc_mutex_destroy( &p_vout->p_sys->lock );
     free( p_vout->p_sys );
 }
 
@@ -589,20 +599,20 @@ BOOL WINAPI DirectXEnumCallback( GUID* p_guid, LPTSTR psz_desc,
                                  HMONITOR hmon )
 {
     vout_thread_t *p_vout = (vout_thread_t *)p_context;
-    vlc_value_t device;
+    char *psz_device;
 
     msg_Dbg( p_vout, "DirectXEnumCallback: %s, %s", psz_desc, psz_drivername );
 
     if( hmon )
     {
-        var_Get( p_vout, "directx-device", &device );
+        psz_device = var_GetString( p_vout, "directx-device" );
 
-        if( ( !device.psz_string || !*device.psz_string ) &&
+        if( ( !psz_device || !*psz_device ) &&
             hmon == p_vout->p_sys->hmonitor )
         {
-            free( device.psz_string );
+            free( psz_device );
         }
-        else if( strcmp( psz_drivername, device.psz_string ) == 0 )
+        else if( strcmp( psz_drivername, psz_device ) == 0 )
         {
             MONITORINFO monitor_info;
             monitor_info.cbSize = sizeof( MONITORINFO );
@@ -626,11 +636,11 @@ BOOL WINAPI DirectXEnumCallback( GUID* p_guid, LPTSTR psz_desc,
             }
 
             p_vout->p_sys->hmonitor = hmon;
-            free( device.psz_string );
+            free( psz_device );
         }
         else
         {
-            free( device.psz_string );
+            free( psz_device );
             return TRUE; /* Keep enumerating */
         }
 
@@ -681,13 +691,13 @@ static int DirectXInitDDraw( vout_thread_t *p_vout )
 
     if( OurDirectDrawEnumerateEx && p_vout->p_sys->MonitorFromWindow )
     {
-        vlc_value_t device;
+        char *psz_device;
 
-        var_Get( p_vout, "directx-device", &device );
-        if( device.psz_string )
+        psz_device = var_GetString( p_vout, "directx-device" );
+        if( psz_device )
         {
-            msg_Dbg( p_vout, "directx-device: %s", device.psz_string );
-            free( device.psz_string );
+            msg_Dbg( p_vout, "directx-device: %s", psz_device );
+            free( psz_device );
         }
 
         p_vout->p_sys->hmonitor =
@@ -1262,6 +1272,7 @@ static int NewPictureVec( vout_thread_t *p_vout, picture_t *p_pic )
                         }
                     }
                 }
+                free( pi_codes );
             }
 
             if( b_result )

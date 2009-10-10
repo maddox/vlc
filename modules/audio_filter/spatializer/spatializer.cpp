@@ -132,18 +132,18 @@ static int Open( vlc_object_t *p_this )
     bool               b_fit = true;
     msg_Dbg( p_this, "Opening filter spatializer" );
 
-    if( p_filter->input.i_format != VLC_CODEC_FL32 ||
-        p_filter->output.i_format != VLC_CODEC_FL32 )
+    if( p_filter->fmt_in.audio.i_format != VLC_CODEC_FL32 ||
+        p_filter->fmt_out.audio.i_format != VLC_CODEC_FL32 )
     {
         b_fit = false;
-        p_filter->input.i_format = VLC_CODEC_FL32;
-        p_filter->output.i_format = VLC_CODEC_FL32;
+        p_filter->fmt_in.audio.i_format = VLC_CODEC_FL32;
+        p_filter->fmt_out.audio.i_format = VLC_CODEC_FL32;
         msg_Warn( p_filter, "bad input or output format" );
     }
-    if ( !AOUT_FMTS_SIMILAR( &p_filter->input, &p_filter->output ) )
+    if ( !AOUT_FMTS_SIMILAR( &p_filter->fmt_in.audio, &p_filter->fmt_out.audio ) )
     {
         b_fit = false;
-        memcpy( &p_filter->output, &p_filter->input,
+        memcpy( &p_filter->fmt_out.audio, &p_filter->fmt_in.audio,
                 sizeof(audio_sample_format_t) );
         msg_Warn( p_filter, "input and output formats are not similar" );
     }
@@ -235,11 +235,11 @@ static void DoWork( aout_instance_t * p_aout, aout_filter_t * p_filter,
                     aout_buffer_t * p_in_buf, aout_buffer_t * p_out_buf )
 {
     p_out_buf->i_nb_samples = p_in_buf->i_nb_samples;
-    p_out_buf->i_nb_bytes = p_in_buf->i_nb_bytes;
+    p_out_buf->i_buffer = p_in_buf->i_buffer;
 
     SpatFilter( p_aout, p_filter, (float*)p_out_buf->p_buffer,
                (float*)p_in_buf->p_buffer, p_in_buf->i_nb_samples,
-               aout_FormatNbChannels( &p_filter->input ) );
+               aout_FormatNbChannels( &p_filter->fmt_in.audio ) );
 }
 
 

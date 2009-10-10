@@ -47,6 +47,7 @@ static inline void input_item_Init( vlc_object_t *p_o, input_item_t *p_i )
     TAB_INIT( p_i->i_options, p_i->ppsz_options );
     p_i->optflagv = NULL, p_i->optflagc = 0;
     TAB_INIT( p_i->i_categories, p_i->pp_categories );
+    TAB_INIT( p_i->i_epg, p_i->pp_epg );
 
     p_i->i_type = ITEM_TYPE_UNKNOWN;
     p_i->b_fixed_name = true;
@@ -94,6 +95,10 @@ static inline void input_item_Clean( input_item_t *p_i )
         free( p_i->es[i] );
     }
     TAB_CLEAN( p_i->i_es, p_i->es );
+
+    for( i = 0; i < p_i->i_epg; i++ )
+        vlc_epg_Delete( p_i->pp_epg[i] );
+    TAB_CLEAN( p_i->i_epg, p_i->pp_epg );
 
     for( i = 0; i < p_i->i_categories; i++ )
     {
@@ -710,9 +715,43 @@ int input_item_DelInfo( input_item_t *p_i,
     return VLC_SUCCESS;
 }
 
-void input_item_SetEpg( input_item_t *p_item,
-                        const char *psz_epg, const vlc_epg_t *p_epg )
+#define EPG_DEBUG
+void input_item_SetEpg( input_item_t *p_item, const vlc_epg_t *p_update )
 {
+    vlc_mutex_lock( &p_item->lock );
+
+    /* */
+    vlc_epg_t *p_epg = NULL;
+    for( int i = 0; i < p_item->i_epg; i++ )
+    {
+        vlc_epg_t *p_tmp = p_item->pp_epg[i];
+
+        if( (p_tmp->psz_name == NULL) != (p_update->psz_name == NULL) )
+            continue;
+        if( p_tmp->psz_name && p_update->psz_name && strcmp(p_tmp->psz_name, p_update->psz_name) )
+            continue;
+
+        p_epg = p_tmp;
+        break;
+    }
+
+    /* */
+    if( !p_epg )
+    {
+        p_epg = vlc_epg_New( p_update->psz_name );
+        if( p_epg )
+            TAB_APPEND( p_item->i_epg, p_item->pp_epg, p_epg );
+    }
+    if( p_epg )
+        vlc_epg_Merge( p_epg, p_update );
+
+    vlc_mutex_unlock( &p_item->lock );
+
+#ifdef EPG_DEBUG
+    char *psz_epg;
+    if( asprintf( &psz_epg, "EPG %s", p_epg->psz_name ? p_epg->psz_name : "unknown" ) < 0 )
+        goto signal;
+
     input_item_DelInfo( p_item, psz_epg, NULL );
 
     vlc_mutex_lock( &p_item->lock );
@@ -740,14 +779,47 @@ void input_item_SetEpg( input_item_t *p_item,
                               p_evt->i_duration/60/60, (p_evt->i_duration/60)%60 );
     }
     vlc_mutex_unlock( &p_item->lock );
+    free( psz_epg );
+signal:
+#endif
 
     if( p_epg->i_event > 0 )
     {
-        vlc_event_t event;
-
-        event.type = vlc_InputItemInfoChanged;
+        vlc_event_t event = { .type = vlc_InputItemInfoChanged, };
         vlc_event_send( &p_item->event_manager, &event );
     }
+}
+
+void input_item_SetEpgOffline( input_item_t *p_item )
+{
+    vlc_mutex_lock( &p_item->lock );
+    for( int i = 0; i < p_item->i_epg; i++ )
+        vlc_epg_SetCurrent( p_item->pp_epg[i], -1 );
+    vlc_mutex_unlock( &p_item->lock );
+
+#ifdef EPG_DEBUG
+    vlc_mutex_lock( &p_item->lock );
+    const int i_epg_info = p_item->i_epg;
+    char *ppsz_epg_info[i_epg_info];
+    for( int i = 0; i < p_item->i_epg; i++ )
+    {
+        const vlc_epg_t *p_epg = p_item->pp_epg[i];
+        if( asprintf( &ppsz_epg_info[i], "EPG %s", p_epg->psz_name ? p_epg->psz_name : "unknown" ) < 0 )
+            ppsz_epg_info[i] = NULL;
+    }
+    vlc_mutex_unlock( &p_item->lock );
+
+    for( int i = 0; i < i_epg_info; i++ )
+    {
+        if( !ppsz_epg_info[i] )
+            continue;
+        input_item_DelInfo( p_item, ppsz_epg_info[i], NULL );
+        free( ppsz_epg_info[i] );
+    }
+#endif
+
+    vlc_event_t event = { .type = vlc_InputItemInfoChanged, };
+    vlc_event_send( &p_item->event_manager, &event );
 }
 
 

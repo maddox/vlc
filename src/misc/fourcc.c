@@ -65,6 +65,7 @@ static const entry_t p_list_video[] = {
         A("mp2v"),
         A("MPEG"),
         A("mpg2"),
+        A("MPG2"),
 
         E("PIM1", "Pinnacle DC1000 (MPEG-1 Video)"),
 
@@ -376,7 +377,9 @@ static const entry_t p_list_video[] = {
         A("WMV3"),
         A("wmv3"),
 
-    B(VLC_CODEC_WMVA, "Windows Media Video Advanced"),
+    /* WMVA is the VC-1 codec before the standardization proces,
+     * it is not bitstream compatible and deprecated  */
+    B(VLC_CODEC_WMVA, "Windows Media Video Advanced Profile"),
         A("WMVA"),
         A("wmva"),
         A("WVP2"),
@@ -387,9 +390,6 @@ static const entry_t p_list_video[] = {
         A("wvc1"),
         A("vc-1"),
         A("VC-1"),
-        /* WMVA is the VC-1 codec before the standardization proces,
-         * it is not bitstream compatible and deprecated  */
-        E("WMVA", "Windows Media Video Advanced Profile"),
 
     /* Microsoft Video 1 */
     B(VLC_CODEC_MSVIDEO1, "Microsoft Video 1"),
@@ -954,6 +954,9 @@ static const entry_t p_list_audio[] = {
     B(VLC_CODEC_GSM_MS, "Microsoft GSM Audio"),
         A("agsm"),
 
+    B(VLC_CODEC_ATRAC1, "atrac 1"),
+        A("atr1"),
+
     B(VLC_CODEC_ATRAC3, "atrac 3"),
         A("atrc"),
         A("\x70\x02\x00\x00"),
@@ -1110,9 +1113,6 @@ static const entry_t p_list_spu[] = {
 
     B(VLC_CODEC_CMML, "CMML annotations/metadata"),
         A("cmml"),
-
-    B(VLC_CODEC_ITU_T140, "ITU T.140 subtitles"),
-        A("t140"),
 
     B(VLC_CODEC_ITU_T140, "ITU T.140 subtitles"),
         A("t140"),

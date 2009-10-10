@@ -662,9 +662,8 @@ DecoderWriteCallback( const FLAC__StreamDecoder *decoder,
     }
 
     /* Date management (already done by packetizer) */
-    p_sys->p_aout_buffer->start_date = p_sys->p_block->i_pts;
-    p_sys->p_aout_buffer->end_date =
-        p_sys->p_block->i_pts + p_sys->p_block->i_length;
+    p_sys->p_aout_buffer->i_pts = p_sys->p_block->i_pts;
+    p_sys->p_aout_buffer->i_length = p_sys->p_block->i_length;
 
     return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
 }
@@ -1359,21 +1358,21 @@ static block_t *Encode( encoder_t *p_enc, aout_buffer_t *p_aout_buf )
     block_t *p_chain;
     unsigned int i;
 
-    p_sys->i_pts = p_aout_buf->start_date -
+    p_sys->i_pts = p_aout_buf->i_pts -
                 (mtime_t)1000000 * (mtime_t)p_sys->i_samples_delay /
                 (mtime_t)p_enc->fmt_in.audio.i_rate;
 
     p_sys->i_samples_delay += p_aout_buf->i_nb_samples;
 
     /* Convert samples to FLAC__int32 */
-    if( p_sys->i_buffer < p_aout_buf->i_nb_bytes * 2 )
+    if( p_sys->i_buffer < p_aout_buf->i_buffer * 2 )
     {
         p_sys->p_buffer =
-            realloc( p_sys->p_buffer, p_aout_buf->i_nb_bytes * 2 );
-        p_sys->i_buffer = p_aout_buf->i_nb_bytes * 2;
+            realloc( p_sys->p_buffer, p_aout_buf->i_buffer * 2 );
+        p_sys->i_buffer = p_aout_buf->i_buffer * 2;
     }
 
-    for( i = 0 ; i < p_aout_buf->i_nb_bytes / 2 ; i++ )
+    for( i = 0 ; i < p_aout_buf->i_buffer / 2 ; i++ )
     {
         p_sys->p_buffer[i]= ((int16_t *)p_aout_buf->p_buffer)[i];
     }

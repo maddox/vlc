@@ -186,6 +186,8 @@ static int OpenVideo( vlc_object_t *p_this )
         return VLC_EGENERIC;
     }
 
+    p_vout->p_sys->b_desktop = false;
+
     /* Initialisations */
     p_vout->pf_init = Init;
     p_vout->pf_end = End;
@@ -197,7 +199,6 @@ static int OpenVideo( vlc_object_t *p_this )
     if( CommonInit( p_vout ) )
         goto error;
 
-    p_vout->p_sys->b_desktop = false;
     var_Create( p_vout, "directx-hw-yuv", VLC_VAR_BOOL | VLC_VAR_DOINHERIT );
     var_Create( p_vout, "directx-device", VLC_VAR_STRING | VLC_VAR_DOINHERIT );
 
@@ -275,7 +276,7 @@ static int Init( vout_thread_t *p_vout )
     }
 
     /* Change the window title bar text */
-    PostMessage( p_vout->p_sys->hwnd, WM_VLC_CHANGE_TEXT, 0, 0 );
+    EventThreadUpdateTitle( p_vout->p_sys->p_event, VOUT_TITLE " (Direct3D output)" );
 
     p_vout->fmt_out.i_chroma = p_vout->output.i_chroma;
     return VLC_SUCCESS;
@@ -302,6 +303,8 @@ static void End( vout_thread_t *p_vout )
  *****************************************************************************/
 static int Manage( vout_thread_t *p_vout )
 {
+    vout_sys_t *p_sys = p_vout->p_sys;
+
     CommonManage( p_vout );
 
     /*
@@ -345,7 +348,18 @@ static int Manage( vout_thread_t *p_vout )
         p_vout->p_sys->b_desktop = !p_vout->p_sys->b_desktop;
         p_vout->pf_display = FirstDisplay;
 
-        EventThreadStart( p_vout->p_sys->p_event );
+        event_cfg_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.use_desktop = p_vout->p_sys->b_desktop;
+
+        event_hwnd_t hwnd;
+        EventThreadStart( p_vout->p_sys->p_event, &hwnd, &cfg );
+
+        p_sys->parent_window = hwnd.parent_window;
+        p_sys->hparent       = hwnd.hparent;
+        p_sys->hwnd          = hwnd.hwnd;
+        p_sys->hvideownd     = hwnd.hvideownd;
+        p_sys->hfswnd        = hwnd.hfswnd;
 
         Init( p_vout );
 

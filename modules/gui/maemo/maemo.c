@@ -35,6 +35,7 @@
 #include <hildon/hildon-program.h>
 #include <hildon/hildon-banner.h>
 #include <gtk/gtk.h>
+#include <gdk/gdkx.h>
 #include <stdio.h>
 #include <inttypes.h>
 
@@ -74,6 +75,14 @@ vlc_module_begin();
         set_callbacks( OpenWindow, CloseWindow );
 vlc_module_end();
 
+static struct
+{
+    vlc_mutex_t    lock;
+    vlc_cond_t     wait;
+    intf_thread_t *intf;
+    bool           enabled;
+} wnd_req = { VLC_STATIC_MUTEX, PTHREAD_COND_INITIALIZER, NULL, false };
+
 /*****************************************************************************
  * Module callbacks
  *****************************************************************************/
@@ -95,9 +104,9 @@ static int Open( vlc_object_t *p_this )
     p_intf->p_sys->p_main_window = NULL;
     p_intf->p_sys->p_video_window = NULL;
 
+    wnd_req.enabled = true;
+    /* ^no need to lock, interfacesare started before video outputs */
     vlc_spin_init( &p_intf->p_sys->event_lock );
-    vlc_mutex_init( &p_intf->p_sys->p_video_mutex );
-    vlc_cond_init( &p_intf->p_sys->p_video_cond );
 
     return VLC_SUCCESS;
 }
@@ -119,7 +128,7 @@ static void Close( vlc_object_t *p_this )
 *****************************************************************************/
 static void Run( intf_thread_t *p_intf )
 {
-    char  *p_args[] = { "", NULL };
+    char  *p_args[] = { (char *)"vlc", NULL };
     char **pp_args  = p_args;
     int    i_args   = 1;
 
@@ -246,6 +255,7 @@ static void Run( intf_thread_t *p_intf )
     var_DelCallback( p_intf->p_sys->p_playlist, "activity",
                      activity_cb, p_intf );
 
+    /* FIXME: we need to wait for vout to clean up... */
     assert( !p_intf->p_sys->p_vout ); /* too late */
     gtk_object_destroy( GTK_OBJECT( window ) );
 }
@@ -264,27 +274,27 @@ static gboolean should_die( gpointer data )
 static int OpenWindow (vlc_object_t *obj)
 {
     vout_window_t *wnd = (vout_window_t *)obj;
+    intf_thread_t *intf;
 
-    if (wnd->cfg->is_standalone)
+    if (wnd->cfg->is_standalone || !wnd_req.enabled)
         return VLC_EGENERIC;
-
-    intf_thread_t *intf = (intf_thread_t*)vlc_object_find_name (obj, "maemo", FIND_ANYWHERE);
-    if (intf == NULL)
-    {
-        msg_Err( obj, "Maemo interface not found" );
-        return VLC_EGENERIC; /* Maemo not in use */
-    }
 
     /* FIXME it should NOT be needed */
     vout_thread_t *vout = vlc_object_find (obj, VLC_OBJECT_VOUT, FIND_PARENT);
+    if (!vout)
+        return VLC_EGENERIC;
+
+    vlc_mutex_lock (&wnd_req.lock);
+    while ((intf = wnd_req.intf) == NULL)
+        vlc_cond_wait (&wnd_req.wait, &wnd_req.lock);
 
     wnd->handle.xid = request_video( intf, vout );
-    if (!wnd->handle.xid)
-    {
-        vlc_object_release( vout );
-        return VLC_EGENERIC;
-    }
+    vlc_mutex_unlock (&wnd_req.lock);
+
     vlc_object_release( vout );
+
+    if (!wnd->handle.xid)
+        return VLC_EGENERIC;
 
     msg_Dbg( intf, "Using handle %"PRIu32, wnd->handle.xid );
 
@@ -322,8 +332,9 @@ static void CloseWindow (vlc_object_t *obj)
     vout_window_t *wnd = (vout_window_t *)obj;
     intf_thread_t *intf = (intf_thread_t *)wnd->sys;
 
+    vlc_mutex_lock( &wnd_req.lock );
     release_video( intf );
-    vlc_object_release (intf);
+    vlc_mutex_unlock( &wnd_req.lock );
 }
 
 static uint32_t request_video( intf_thread_t *p_intf, vout_thread_t *p_nvout )
@@ -333,16 +344,6 @@ static uint32_t request_video( intf_thread_t *p_intf, vout_thread_t *p_nvout )
         msg_Dbg( p_intf, "Embedded video already in use" );
         return 0;
     }
-
-    vlc_mutex_lock( &p_intf->p_sys->p_video_mutex );
-    mutex_cleanup_push( &p_intf->p_sys->p_video_mutex );
-
-    // We wait until the p_video_window is set
-    while( p_intf->p_sys->p_video_window == NULL )
-        vlc_cond_wait( &p_intf->p_sys->p_video_cond,
-                       &p_intf->p_sys->p_video_mutex );
-
-    vlc_cleanup_run();
 
     p_intf->p_sys->p_vout = vlc_object_hold( p_nvout );
     return GDK_WINDOW_XID( p_intf->p_sys->p_video_window->window );
@@ -368,7 +369,10 @@ static gboolean video_widget_ready( gpointer data )
     p_intf->p_sys->p_video_window = video;
     gtk_widget_grab_focus( video );
 
-    vlc_cond_signal( &p_intf->p_sys->p_video_cond );
+    vlc_mutex_lock( &wnd_req.lock );
+    wnd_req.intf = p_intf;
+    vlc_cond_signal( &wnd_req.wait );
+    vlc_mutex_unlock( &wnd_req.lock );
 
     // We rewind the input
     if( p_intf->p_sys->p_input )

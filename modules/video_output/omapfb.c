@@ -40,15 +40,9 @@
 /* Embedded window handling */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/keysym.h>
-
-#ifdef HAVE_OSSO
-#include <libosso.h>
-#endif
 
 #include <vlc_common.h>
 #include <vlc_plugin.h>
-#include <vlc_keys.h>
 #include <vlc_vout.h>
 #include <vlc_vout_window.h>
 #include <vlc_playlist.h>
@@ -75,10 +69,6 @@ static void UpdateScreen     ( vout_thread_t *,
 static int  InitWindow       ( vout_thread_t * );
 static void CreateWindow     ( vout_sys_t * );
 static void ToggleFullScreen ( vout_thread_t * );
-
-#ifdef HAVE_OSSO
-static const int i_backlight_on_interval = 300;
-#endif
 
 /*****************************************************************************
  * Module descriptor
@@ -148,7 +138,6 @@ struct vout_sys_t
     uint32_t             i_video_height;                     /* video height */
     vlc_fourcc_t         i_chroma;
     int                  i_color_format;                   /* OMAPFB_COLOR_* */
-    bool                 b_embed;
     bool                 b_video_enabled;        /* Video must be displayed? */
     picture_t           *p_output_picture;
 
@@ -168,11 +157,6 @@ struct vout_sys_t
     /* Dummy memory */
     int        i_null_fd;
     uint8_t   *p_null;
-
-#ifdef HAVE_OSSO
-    osso_context_t      *p_octx;
-    int                 i_backlight_on_counter;
-#endif
 };
 
 /*****************************************************************************
@@ -200,8 +184,6 @@ static int Create( vlc_object_t *p_this )
     p_vout->pf_render = NULL;
     p_vout->pf_display = DisplayVideo;
     p_vout->pf_control = Control;
-
-    p_sys->b_embed = var_CreateGetInteger( p_vout, "omap-embedded" );
     p_sys->b_video_enabled = true;
 
     if( OpenDisplay( p_vout ) )
@@ -215,16 +197,6 @@ static int Create( vlc_object_t *p_this )
         free( p_vout->p_sys );
         return VLC_EGENERIC;
     }
-
-#ifdef HAVE_OSSO
-    p_vout->p_sys->i_backlight_on_counter = i_backlight_on_interval;
-    p_vout->p_sys->p_octx = osso_initialize( "vlc", VERSION, 0, NULL );
-    if ( p_vout->p_sys->p_octx == NULL ) {
-        msg_Err( p_vout, "Could not get osso context" );
-    } else {
-        msg_Dbg( p_vout, "Initialized osso context" );
-    }
-#endif
 
     return VLC_SUCCESS;
 }
@@ -240,20 +212,11 @@ static void Destroy( vlc_object_t *p_this )
 
     CloseDisplay( p_vout );
 
-    if( p_vout->p_sys->b_embed )
+    if( p_vout->p_sys->owner_window )
     {
         vout_window_Delete( p_vout->p_sys->owner_window );
-        if( p_vout->b_fullscreen )
-            XDestroyWindow( p_vout->p_sys->p_display, p_vout->p_sys->window );
         XCloseDisplay( p_vout->p_sys->p_display );
     }
-
-#ifdef HAVE_OSSO
-    if ( p_vout->p_sys->p_octx != NULL ) {
-        msg_Dbg( p_vout, "Deinitializing osso context" );
-        osso_deinitialize( p_vout->p_sys->p_octx );
-    }
-#endif
 
     /* Destroy structure */
     free( p_vout->p_sys );
@@ -409,50 +372,9 @@ static int Manage( vout_thread_t *p_vout )
             p_vout->p_sys->i_time_button_last_pressed =
                         ((XButtonEvent *)&xevent)->time;
         }
-        else if( xevent.type == KeyPress )
-        {
-            KeySym x_key_symbol;
-            vlc_value_t val;
-
-            x_key_symbol = XKeycodeToKeysym( p_vout->p_sys->p_display,
-                                             xevent.xkey.keycode, 0 );
-
-            switch( x_key_symbol )
-            {
-            case XK_Return:
-                val.i_int = ACTIONID_PLAY_PAUSE; break;
-            case XK_Escape:
-                val.i_int = ACTIONID_QUIT; break;
-            case XK_Down:
-                val.i_int = ACTIONID_JUMP_BACKWARD_MEDIUM; break;
-            case XK_Up:
-                val.i_int = ACTIONID_JUMP_FORWARD_MEDIUM; break;
-            case XK_Right:
-                val.i_int = ACTIONID_JUMP_FORWARD_SHORT; break;
-            case XK_Left:
-                val.i_int = ACTIONID_JUMP_BACKWARD_SHORT; break;
-            case XK_F6:
-                val.i_int = ACTIONID_TOGGLE_FULLSCREEN; break;
-            case XK_F7:
-                val.i_int = ACTIONID_VOL_UP; break;
-            case XK_F8:
-                val.i_int = ACTIONID_VOL_DOWN; break;
-            }
-            var_SetInteger( p_vout->p_libvlc, "key-action", val.i_int );
-        }
-        else if( ( xevent.type == VisibilityNotify &&
-                 xevent.xvisibility.state == VisibilityUnobscured ) ||
-                 xevent.type == FocusIn )
-        {
-            p_vout->p_sys->b_video_enabled = true;
-            p_vout->p_sys->p_output_picture->p->p_pixels =
-                p_vout->p_sys->p_center;
-            XSetInputFocus( p_vout->p_sys->p_display, p_vout->p_sys->window,
-                            RevertToParent, CurrentTime );
-        }
         else if( ( xevent.type == VisibilityNotify &&
                  xevent.xvisibility.state != VisibilityUnobscured ) ||
-                 xevent.type == FocusOut || xevent.type == UnmapNotify )
+                 xevent.type == UnmapNotify )
         {
             UpdateScreen( p_vout, 0, 0,
                           p_vout->p_sys->fb_vinfo.xres,
@@ -469,10 +391,12 @@ static int Manage( vout_thread_t *p_vout )
     if( p_vout->i_changes & VOUT_FULLSCREEN_CHANGE )
     {
         /* Update the object variable and trigger callback */
-        var_SetBool( p_vout, "fullscreen", !p_vout->b_fullscreen );
+        p_vout->b_fullscreen = !p_vout->b_fullscreen;
+        var_SetBool( p_vout, "fullscreen", p_vout->b_fullscreen );
 
-        if( p_vout->p_sys->b_embed )
-            ToggleFullScreen( p_vout );
+        if( p_vout->p_sys->owner_window )
+            vout_window_SetFullscreen( p_vout->p_sys->owner_window,
+                                       p_vout->b_fullscreen );
         p_vout->i_changes &= ~VOUT_FULLSCREEN_CHANGE;
     }
 
@@ -485,23 +409,6 @@ static int Manage( vout_thread_t *p_vout )
             return VLC_EGENERIC;
         }
     }
-
-
-#ifdef HAVE_OSSO
-    if ( p_vout->p_sys->p_octx != NULL ) {
-        if ( p_vout->p_sys->i_backlight_on_counter == i_backlight_on_interval ) {
-            if ( osso_display_blanking_pause( p_vout->p_sys->p_octx ) != OSSO_OK ) {
-                msg_Err( p_vout, "Could not disable backlight blanking" );
-        } else {
-                msg_Dbg( p_vout, "Backlight blanking disabled" );
-            }
-            p_vout->p_sys->i_backlight_on_counter = 0;
-        } else {
-            p_vout->p_sys->i_backlight_on_counter ++;
-        }
-    }
-#endif
-
     return VLC_SUCCESS;
 }
 
@@ -540,7 +447,7 @@ static int OpenDisplay( vout_thread_t *p_vout )
     char *psz_device;                             /* framebuffer device path */
 
     /* Open framebuffer device */
-    if( !(psz_device = config_GetPsz( p_vout, FB_DEV_VAR )) )
+    if( !(psz_device = var_CreateGetNonEmptyString( p_vout, FB_DEV_VAR )) )
     {
         msg_Err( p_vout, "don't know which fb device to open" );
         return VLC_EGENERIC;
@@ -571,13 +478,13 @@ static int OpenDisplay( vout_thread_t *p_vout )
 
     if( ioctl( p_sys->i_fd, FBIOGET_VSCREENINFO, &p_sys->fb_vinfo ) )
     {
-        msg_Err( p_vout, "Can't get VSCREENINFO: %s", strerror(errno) );
+        msg_Err( p_vout, "Can't get VSCREENINFO: %m" );
         close( p_sys->i_fd );
         return VLC_EGENERIC;
     }
     if( ioctl( p_sys->i_fd, FBIOGET_FSCREENINFO, &p_sys->fb_finfo ) )
     {
-        msg_Err( p_vout, "Can't get FSCREENINFO: %s", strerror(errno) );
+        msg_Err( p_vout, "Can't get FSCREENINFO: %m" );
         close( p_sys->i_fd );
         return VLC_EGENERIC;
     }
@@ -589,7 +496,7 @@ static int OpenDisplay( vout_thread_t *p_vout )
     if( (p_sys->p_video = (uint8_t *)mmap( 0, p_sys->i_page_size, PROT_READ | PROT_WRITE, MAP_SHARED,
                                             p_sys->i_fd, 0 )) == MAP_FAILED )
     {
-        msg_Err( p_vout, "Can't mmap: %s", strerror(errno) );
+        msg_Err( p_vout, "Can't mmap: %m" );
         close( p_sys->i_fd );
         return VLC_EGENERIC;
     }
@@ -609,7 +516,7 @@ static int OpenDisplay( vout_thread_t *p_vout )
     if( (p_sys->p_null = (uint8_t *)mmap( 0, p_sys->i_page_size, PROT_READ | PROT_WRITE,
                                           MAP_PRIVATE, p_sys->i_null_fd, 0 )) == MAP_FAILED )
     {
-        msg_Err( p_vout, "Can't mmap 2: %s", strerror(errno) );
+        msg_Err( p_vout, "Can't mmap 2: %m" );
         munmap( p_sys->p_video, p_sys->i_page_size );
         close( p_sys->i_null_fd );
         close( p_sys->i_fd );
@@ -660,7 +567,7 @@ static int InitWindow( vout_thread_t *p_vout )
 {
     vout_sys_t *p_sys = (vout_sys_t *)p_vout->p_sys;
 
-    if( p_sys->b_embed )
+    if( var_CreateGetBool( p_vout, "omap-embedded" ) )
     {
         p_sys->p_display = XOpenDisplay( NULL );
 
@@ -678,7 +585,6 @@ static int InitWindow( vout_thread_t *p_vout )
         p_sys->main_window = p_sys->embedded_window;
 
         // We have to create a new window to get some events
-        // (ButtonPress for example)
         CreateWindow( p_sys );
     }
     else
@@ -700,7 +606,8 @@ static void CreateWindow( vout_sys_t *p_sys )
     xwindow_attributes.backing_store = Always;
     xwindow_attributes.background_pixel =
         BlackPixel( p_sys->p_display, DefaultScreen(p_sys->p_display) );
-    xwindow_attributes.event_mask = ExposureMask | StructureNotifyMask;
+    xwindow_attributes.event_mask = ExposureMask | StructureNotifyMask
+                                  | VisibilityChangeMask;
     p_sys->window = XCreateWindow( p_sys->p_display,
                                    p_sys->owner_window->handle.xid,
                                    0, 0,
@@ -712,66 +619,7 @@ static void CreateWindow( vout_sys_t *p_sys )
                                    &xwindow_attributes );
 
     XMapWindow( p_sys->p_display, p_sys->window );
-    XSelectInput( p_sys->p_display, p_sys->window,
-                  KeyPressMask | ButtonPressMask | StructureNotifyMask |
-                  VisibilityChangeMask | FocusChangeMask );
     XSelectInput( p_sys->p_display, p_sys->owner_window->handle.xid,
                   StructureNotifyMask );
-    XSetInputFocus( p_sys->p_display, p_sys->window, RevertToParent, CurrentTime );
 }
 
-static void ToggleFullScreen ( vout_thread_t * p_vout )
-{
-    p_vout->b_fullscreen = !p_vout->b_fullscreen;
-
-    if( p_vout->b_fullscreen )
-    {
-        msg_Dbg( p_vout, "Entering fullscreen mode" );
-        XReparentWindow( p_vout->p_sys->p_display,
-                         p_vout->p_sys->window,
-                         DefaultRootWindow( p_vout->p_sys->p_display ),
-                         0, 0 );
-
-        XEvent xev;
-
-        /* init X event structure for _NET_WM_FULLSCREEN client msg */
-        xev.xclient.type = ClientMessage;
-        xev.xclient.serial = 0;
-        xev.xclient.send_event = True;
-        xev.xclient.message_type = XInternAtom( p_vout->p_sys->p_display,
-                                                "_NET_WM_STATE", False );
-        xev.xclient.window = p_vout->p_sys->window;
-        xev.xclient.format = 32;
-        if( p_vout->b_fullscreen )
-            xev.xclient.data.l[0] = 1;
-        else
-            xev.xclient.data.l[0] = 0;
-        xev.xclient.data.l[1] = XInternAtom( p_vout->p_sys->p_display,
-                                            "_NET_WM_STATE_FULLSCREEN", False );
-        xev.xclient.data.l[2] = 0;
-        xev.xclient.data.l[3] = 0;
-        xev.xclient.data.l[4] = 0;
-
-        XSendEvent( p_vout->p_sys->p_display,
-                    DefaultRootWindow( p_vout->p_sys->p_display ), False,
-                    SubstructureRedirectMask | SubstructureNotifyMask, &xev);
-
-        p_vout->p_sys->main_window.i_x = p_vout->p_sys->main_window.i_y = 0;
-        p_vout->p_sys->main_window.i_width = p_vout->p_sys->fb_vinfo.xres;
-        p_vout->p_sys->main_window.i_height = p_vout->p_sys->fb_vinfo.yres;
-    }
-    else
-    {
-        msg_Dbg( p_vout, "Leaving fullscreen mode" );
-
-        XDestroyWindow( p_vout->p_sys->p_display, p_vout->p_sys->window );
-
-        p_vout->p_sys->main_window = p_vout->p_sys->embedded_window;
-        CreateWindow( p_vout->p_sys );
-    }
-
-    XSync( p_vout->p_sys->p_display, False);
-
-    /* signal that the size needs to be updated */
-    p_vout->i_changes |= VOUT_SIZE_CHANGE;
-}

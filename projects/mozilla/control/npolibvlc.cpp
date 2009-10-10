@@ -218,15 +218,13 @@ LibvlcAudioNPObject::getProperty(int index, NPVariant &result)
         {
             case ID_audio_mute:
             {
-                bool muted = libvlc_audio_get_mute(p_plugin->getVLC(), &ex);
-                RETURN_ON_EXCEPTION(this,ex);
+                bool muted = libvlc_audio_get_mute(p_plugin->getVLC());
                 BOOLEAN_TO_NPVARIANT(muted, result);
                 return INVOKERESULT_NO_ERROR;
             }
             case ID_audio_volume:
             {
-                int volume = libvlc_audio_get_volume(p_plugin->getVLC(), &ex);
-                RETURN_ON_EXCEPTION(this,ex);
+                int volume = libvlc_audio_get_volume(p_plugin->getVLC());
                 INT32_TO_NPVARIANT(volume, result);
                 return INVOKERESULT_NO_ERROR;
             }
@@ -280,8 +278,7 @@ LibvlcAudioNPObject::setProperty(int index, const NPVariant &value)
                 if( NPVARIANT_IS_BOOLEAN(value) )
                 {
                     libvlc_audio_set_mute(p_plugin->getVLC(),
-                                          NPVARIANT_TO_BOOLEAN(value), &ex);
-                    RETURN_ON_EXCEPTION(this,ex);
+                                          NPVARIANT_TO_BOOLEAN(value));
                     return INVOKERESULT_NO_ERROR;
                 }
                 return INVOKERESULT_INVALID_VALUE;
@@ -349,8 +346,7 @@ LibvlcAudioNPObject::invoke(int index, const NPVariant *args,
             case ID_audio_togglemute:
                 if( argCount == 0 )
                 {
-                    libvlc_audio_toggle_mute(p_plugin->getVLC(), &ex);
-                    RETURN_ON_EXCEPTION(this,ex);
+                    libvlc_audio_toggle_mute(p_plugin->getVLC());
                     VOID_TO_NPVARIANT(result);
                     return INVOKERESULT_NO_ERROR;
                 }

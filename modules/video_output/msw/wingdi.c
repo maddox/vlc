@@ -70,10 +70,6 @@ static void SetPalette( vout_thread_t *, uint16_t *, uint16_t *, uint16_t * );
 
 static void InitBuffers        ( vout_thread_t * );
 
-
-
-#define DX_POSITION_CHANGE 0x1000
-
 /*****************************************************************************
  * Module descriptor
  *****************************************************************************/
@@ -148,9 +144,6 @@ static int OpenVideo ( vlc_object_t *p_this )
     p_vout->pf_control = Control;
 #ifdef MODULE_NAME_IS_wingapi
     p_vout->pf_display = FirstDisplayGAPI;
-
-    p_vout->p_sys->b_focus = 0;
-    p_vout->p_sys->b_parent_focus = 0;
 #else
     p_vout->pf_display = FirstDisplayGDI;
 #endif
@@ -273,7 +266,11 @@ static int Init( vout_thread_t *p_vout )
     PP_OUTPUTPICTURE[ I_OUTPUTPICTURES++ ] = p_pic;
 
     /* Change the window title bar text */
-    PostMessage( p_vout->p_sys->hwnd, WM_VLC_CHANGE_TEXT, 0, 0 );
+#ifdef MODULE_NAME_IS_wingapi
+    EventThreadUpdateTitle( p_vout->p_sys->p_event, VOUT_TITLE " (WinGAPI output)" );
+#else
+    EventThreadUpdateTitle( p_vout->p_sys->p_event, VOUT_TITLE " (WinGDI output)" );
+#endif
     UpdateRects( p_vout, true );
 
     return VLC_SUCCESS;

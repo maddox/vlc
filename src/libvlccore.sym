@@ -249,7 +249,7 @@ msg_Unsubscribe
 msleep
 mstrtime
 mwait
-__net_Accept
+net_Accept
 net_AcceptSingle
 __net_Connect
 __net_ConnectDgram
@@ -373,6 +373,8 @@ spu_DisplaySubpicture
 spu_Init
 spu_RenderSubpictures
 spu_SortSubpictures
+sql_Create
+sql_Destroy
 __stats_TimerClean
 __stats_TimerDump
 __stats_TimersCleanAll
@@ -549,6 +551,13 @@ vlc_timer_schedule
 vlc_ureduce
 VLC_Version
 vlc_wclosedir
+vlc_epg_Init
+vlc_epg_Clean
+vlc_epg_New
+vlc_epg_Delete
+vlc_epg_AddEvent
+vlc_epg_SetCurrent
+vlc_epg_Merge
 vlm_Control
 vlm_Delete
 vlm_ExecuteCommand
@@ -599,3 +608,5 @@ text_style_Delete
 text_style_Duplicate
 text_style_New
 xml_Delete
+KeyToString
+StringToKey

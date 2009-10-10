@@ -54,8 +54,8 @@ class QMenu;
 class QSize;
 
 enum {
-    CONTROLS_VISIBLE = 0x1,
-    CONTROLS_HIDDEN = 0x2,
+    CONTROLS_VISIBLE  = 0x1,
+    CONTROLS_HIDDEN   = 0x2,
     CONTROLS_ADVANCED = 0x4,
 };
 
@@ -83,8 +83,8 @@ public:
     int controlVideo( int i_query, va_list args );
 
     /* Getters */
-    QSystemTrayIcon *getSysTray() { return sysTray; };
-    QMenu *getSysTrayMenu() { return systrayMenu; };
+    QSystemTrayIcon *getSysTray() { return sysTray; }
+    QMenu *getSysTrayMenu() { return systrayMenu; }
     int getControlsVisibilityStatus();
 
     /* Sizehint() */
@@ -103,15 +103,6 @@ protected:
     virtual void resizeEvent( QResizeEvent * event );
 
 private:
-    QSettings           *settings;
-    QSystemTrayIcon     *sysTray;
-    QMenu               *systrayMenu;
-    QString              input_name;
-    QGridLayout         *mainLayout;
-    ControlsWidget      *controls;
-    InputControlsWidget *inputC;
-    FullscreenControllerWidget *fullscreenControls;
-
     void createMainWidget( QSettings* );
     void createStatusBar();
 
@@ -122,7 +113,16 @@ private:
     void handleSystray();
     void createSystray();
     void initSystray();
+    bool isDocked() { return ( i_pl_dock != PL_UNDOCKED ); }
 
+    QSettings           *settings;
+    QSystemTrayIcon     *sysTray;
+    QMenu               *systrayMenu;
+    QString              input_name;
+    QGridLayout         *mainLayout;
+    ControlsWidget      *controls;
+    InputControlsWidget *inputC;
+    FullscreenControllerWidget *fullscreenControls;
 
     /* Video */
     VideoWidget         *videoWidget;
@@ -131,6 +131,11 @@ private:
     VisualSelector      *visualSelector;
     PlaylistWidget      *playlistWidget;
 
+    /* Status Bar */
+    QLabel              *nameLabel;
+    QLabel              *cryptedLabel;
+
+    /* Status and flags */
     bool                 videoIsActive;       ///< Having a video now / THEMIM->hasV
     bool                 videoEmbeddedFlag;   ///< Want an external Video Window
     bool                 playlistVisible;     ///< Is the playlist visible ?
@@ -142,13 +147,8 @@ private:
     QSize                mainVideoSize;       ///< Wnd with video (all modes)
     int                  i_visualmode;        ///< Visual Mode
     pl_dock_e            i_pl_dock;
-    bool                 isDocked() { return ( i_pl_dock != PL_UNDOCKED ); }
     int                  i_bg_height;         ///< Save height of bgWidget
     bool                 b_shouldHide;
-
-    /* Status Bar */
-    QLabel              *nameLabel;
-    QLabel              *cryptedLabel;
 
 #ifdef WIN32
     HIMAGELIST himl;
@@ -193,7 +193,7 @@ private slots:
 
 signals:
     void askGetVideo( WId *p_id, int *pi_x, int *pi_y,
-                      unsigned int *pi_width, unsigned int *pi_height );
+                      unsigned *pi_width, unsigned *pi_height );
     void askReleaseVideo( );
     void askVideoToResize( unsigned int, unsigned int );
     void askVideoSetFullScreen( bool );

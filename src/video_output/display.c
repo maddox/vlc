@@ -47,14 +47,14 @@ static void SplitterClose(vout_display_t *vd);
  *****************************************************************************/
 static picture_t *VideoBufferNew(filter_t *filter)
 {
+    vout_display_t *vd = (vout_display_t*)filter->p_owner;
     const video_format_t *fmt = &filter->fmt_out.video;
 
-    picture_t *picture = picture_New(fmt->i_chroma,
-                                     fmt->i_width, fmt->i_height,
-                                     fmt->i_aspect);
-    if (!picture)
-        msg_Err(filter, "Failed to allocate picture");
-    return picture;
+    assert(vd->fmt.i_chroma == fmt->i_chroma &&
+           vd->fmt.i_width  == fmt->i_width  &&
+           vd->fmt.i_height == fmt->i_height);
+
+    return vout_display_Get(vd);
 }
 static void VideoBufferDelete(filter_t *filter, picture_t *picture)
 {
@@ -62,12 +62,11 @@ static void VideoBufferDelete(filter_t *filter, picture_t *picture)
     picture_Release(picture);
 }
 
-static int  FilterAllocationInit(filter_t *filter, void *data)
+static int  FilterAllocationInit(filter_t *filter, void *vd)
 {
-    VLC_UNUSED(data);
-
     filter->pf_vout_buffer_new = VideoBufferNew;
     filter->pf_vout_buffer_del = VideoBufferDelete;
+    filter->p_owner            = vd;
 
     return VLC_SUCCESS;
 }
@@ -75,6 +74,7 @@ static void FilterAllocationClean(filter_t *filter)
 {
     filter->pf_vout_buffer_new = NULL;
     filter->pf_vout_buffer_del = NULL;
+    filter->p_owner            = NULL;
 }
 
 /*****************************************************************************
@@ -161,7 +161,8 @@ static int vout_display_Control(vout_display_t *vd, int query, ...)
 }
 static void vout_display_Manage(vout_display_t *vd)
 {
-    vd->manage(vd);
+    if (vd->manage)
+        vd->manage(vd);
 }
 
 /* */
@@ -275,19 +276,6 @@ struct vout_display_owner_sys_t {
     bool            is_wrapper;  /* Is the current display a wrapper */
     vout_display_t  *wrapper; /* Vout display wrapper */
 
-    /* mouse state */
-    struct {
-        vlc_mouse_t state;
-
-        mtime_t last_pressed;
-        mtime_t last_moved;
-        bool    is_hidden;
-
-        /* */
-        mtime_t double_click_timeout;
-        mtime_t hide_timeout;
-    } mouse;
-
     /* */
     vout_display_cfg_t cfg;
     bool     is_on_top_initial;
@@ -306,15 +294,6 @@ struct vout_display_owner_sys_t {
     } crop_saved;
 
     /* */
-    bool reset_pictures;
-
-    bool ch_fullscreen;
-    bool is_fullscreen;
-
-    bool ch_display_size;
-    int  display_width;
-    int  display_height;
-
     bool ch_display_filled;
     bool is_display_filled;
 
@@ -346,6 +325,35 @@ struct vout_display_owner_sys_t {
     /* */
     video_format_t source;
     filter_chain_t *filters;
+
+    /* Lock protecting the variables used by
+     * VoutDisplayEvent(ie vout_display_SendEvent) */
+    vlc_mutex_t lock;
+
+    /* mouse state */
+    struct {
+        vlc_mouse_t state;
+
+        mtime_t last_pressed;
+        mtime_t last_moved;
+        bool    is_hidden;
+        bool    ch_activity;
+
+        /* */
+        mtime_t double_click_timeout;
+        mtime_t hide_timeout;
+    } mouse;
+
+    bool reset_pictures;
+
+    bool ch_fullscreen;
+    bool is_fullscreen;
+
+    bool ch_display_size;
+    int  display_width;
+    int  display_height;
+    bool display_is_fullscreen;
+    bool display_is_forced;
 };
 
 static void VoutDisplayCreateRender(vout_display_t *vd)
@@ -379,7 +387,7 @@ static void VoutDisplayCreateRender(vout_display_t *vd)
 
     osys->filters = filter_chain_New(vd, "video filter2", false,
                                      FilterAllocationInit,
-                                     FilterAllocationClean, NULL);
+                                     FilterAllocationClean, vd);
     assert(osys->filters); /* TODO critical */
 
     /* */
@@ -421,12 +429,77 @@ static void VoutDisplayResetRender(vout_display_t *vd)
     VoutDisplayDestroyRender(vd);
     VoutDisplayCreateRender(vd);
 }
-static void VoutDisplayEventMouse(vout_display_t *vd, const vlc_mouse_t *mouse)
+static void VoutDisplayEventMouse(vout_display_t *vd, int event, va_list args)
 {
     vout_display_owner_sys_t *osys = vd->owner.sys;
 
+    vlc_mutex_lock(&osys->lock);
+
     /* */
-    vlc_mouse_t m = *mouse;
+    vlc_mouse_t m = osys->mouse.state;
+    bool is_ignored = false;
+
+    switch (event) {
+    case VOUT_DISPLAY_EVENT_MOUSE_STATE: {
+        const int x = (int)va_arg(args, int);
+        const int y = (int)va_arg(args, int);
+        const int button_mask = (int)va_arg(args, int);
+
+        vlc_mouse_Init(&m);
+        m.i_x = x;
+        m.i_y = y;
+        m.i_pressed = button_mask;
+        break;
+    }
+    case VOUT_DISPLAY_EVENT_MOUSE_MOVED: {
+        const int x = (int)va_arg(args, int);
+        const int y = (int)va_arg(args, int);
+        if (x != osys->mouse.state.i_x || y != osys->mouse.state.i_y) {
+            //msg_Dbg(vd, "VoutDisplayEvent 'mouse' @%d,%d", x, y);
+
+            m.i_x = x;
+            m.i_y = y;
+            m.b_double_click = false;
+        } else {
+            is_ignored = true;
+        }
+        break;
+    }
+    case VOUT_DISPLAY_EVENT_MOUSE_PRESSED:
+    case VOUT_DISPLAY_EVENT_MOUSE_RELEASED: {
+        const int button = (int)va_arg(args, int);
+        const int button_mask = 1 << button;
+
+        /* Ignore inconsistent event */
+        if ((event == VOUT_DISPLAY_EVENT_MOUSE_PRESSED  &&  (osys->mouse.state.i_pressed & button_mask)) ||
+            (event == VOUT_DISPLAY_EVENT_MOUSE_RELEASED && !(osys->mouse.state.i_pressed & button_mask))) {
+            is_ignored = true;
+            break;
+        }
+
+        /* */
+        msg_Dbg(vd, "VoutDisplayEvent 'mouse button' %d t=%d", button, event);
+
+        m.b_double_click = false;
+        if (event == VOUT_DISPLAY_EVENT_MOUSE_PRESSED)
+            m.i_pressed |= button_mask;
+        else
+            m.i_pressed &= ~button_mask;
+        break;
+    }
+    case VOUT_DISPLAY_EVENT_MOUSE_DOUBLE_CLICK:
+        msg_Dbg(vd, "VoutDisplayEvent 'double click'");
+
+        m.b_double_click = true;
+        break;
+    default:
+        assert(0);
+    }
+
+    if (is_ignored) {
+        vlc_mutex_unlock(&osys->lock);
+        return;
+    }
 
     /* Emulate double-click if needed */
     if (!vd->info.has_double_click &&
@@ -444,6 +517,16 @@ static void VoutDisplayEventMouse(vout_display_t *vd, const vlc_mouse_t *mouse)
     /* */
     osys->mouse.state = m;
 
+    /* */
+    osys->mouse.ch_activity = true;
+    if (!vd->info.has_hide_mouse)
+        osys->mouse.last_moved = mdate();
+
+    /* */
+    vlc_mutex_unlock(&osys->lock);
+
+    /* */
+    vout_SendEventMouseVisible(osys->vout);
     vout_SendDisplayEventMouse(osys->vout, &m);
 }
 
@@ -463,101 +546,45 @@ static void VoutDisplayEvent(vout_display_t *vd, int event, va_list args)
         vout_SendEventKey(osys->vout, key);
         break;
     }
-    case VOUT_DISPLAY_EVENT_MOUSE_STATE: {
-        const int x = (int)va_arg(args, int);
-        const int y = (int)va_arg(args, int);
-        const int button_mask = (int)va_arg(args, int);
-
-        vlc_mouse_t m;
-
-        vlc_mouse_Init(&m);
-        m.i_x = x;
-        m.i_y = y;
-        m.i_pressed = button_mask;
-
-        VoutDisplayEventMouse(vd, &m);
-        break;
-    }
-    case VOUT_DISPLAY_EVENT_MOUSE_MOVED: {
-        const int x = (int)va_arg(args, int);
-        const int y = (int)va_arg(args, int);
-        if (x != osys->mouse.state.i_x || y != osys->mouse.state.i_y) {
-            msg_Dbg(vd, "VoutDisplayEvent 'mouse' @%d,%d", x, y);
-
-            /* */
-            osys->mouse.is_hidden = false;
-            if (!vd->info.has_hide_mouse)
-                osys->mouse.last_moved = mdate();
-            vout_SendEventMouseVisible(osys->vout);
-
-            vlc_mouse_t m = osys->mouse.state;
-            m.i_x = x;
-            m.i_y = y;
-            m.b_double_click = false;
-
-            VoutDisplayEventMouse(vd, &m);
-        }
-        break;
-    }
+    case VOUT_DISPLAY_EVENT_MOUSE_STATE:
+    case VOUT_DISPLAY_EVENT_MOUSE_MOVED:
     case VOUT_DISPLAY_EVENT_MOUSE_PRESSED:
-    case VOUT_DISPLAY_EVENT_MOUSE_RELEASED: {
-        const int button = (int)va_arg(args, int);
-        const int button_mask = 1 << button;
-
-        /* Ignore inconistent event */
-        if (event == VOUT_DISPLAY_EVENT_MOUSE_PRESSED && (osys->mouse.state.i_pressed & button_mask))
-            break;
-        if (event == VOUT_DISPLAY_EVENT_MOUSE_RELEASED && !(osys->mouse.state.i_pressed & button_mask))
-            break;
-
-        /* */
-        msg_Dbg(vd, "VoutDisplayEvent 'mouse button' %d t=%d", button, event);
-
-        osys->mouse.is_hidden = false;
-        if (!vd->info.has_hide_mouse)
-            osys->mouse.last_moved = mdate();
-        vout_SendEventMouseVisible(osys->vout);
-
-        vlc_mouse_t m = osys->mouse.state;
-        m.b_double_click = false;
-        if (event == VOUT_DISPLAY_EVENT_MOUSE_PRESSED)
-            m.i_pressed |= button_mask;
-        else
-            m.i_pressed &= ~button_mask;
-
-        VoutDisplayEventMouse(vd, &m);
+    case VOUT_DISPLAY_EVENT_MOUSE_RELEASED:
+    case VOUT_DISPLAY_EVENT_MOUSE_DOUBLE_CLICK:
+        VoutDisplayEventMouse(vd, event, args);
         break;
-    }
-    case VOUT_DISPLAY_EVENT_MOUSE_DOUBLE_CLICK: {
-        msg_Dbg(vd, "VoutDisplayEvent 'double click'");
-
-        vlc_mouse_t m = osys->mouse.state;
-        m.b_double_click = true;
-        VoutDisplayEventMouse(vd, &m);
-        break;
-    }
 
     case VOUT_DISPLAY_EVENT_FULLSCREEN: {
         const int is_fullscreen = (int)va_arg(args, int);
 
         msg_Dbg(vd, "VoutDisplayEvent 'fullscreen' %d", is_fullscreen);
 
-        if (!is_fullscreen == !osys->is_fullscreen)
-            break;
-        osys->ch_fullscreen = true;
-        osys->is_fullscreen = is_fullscreen;
+        vlc_mutex_lock(&osys->lock);
+        if (!is_fullscreen != !osys->is_fullscreen) {
+            osys->ch_fullscreen = true;
+            osys->is_fullscreen = is_fullscreen;
+        }
+        vlc_mutex_unlock(&osys->lock);
         break;
     }
 
     case VOUT_DISPLAY_EVENT_DISPLAY_SIZE: {
         const int width  = (int)va_arg(args, int);
         const int height = (int)va_arg(args, int);
-        msg_Dbg(vd, "VoutDisplayEvent 'resize' %dx%d", width, height);
+        const bool is_fullscreen = (bool)va_arg(args, int);
+        msg_Dbg(vd, "VoutDisplayEvent 'resize' %dx%d %s",
+                width, height, is_fullscreen ? "fullscreen" : "window");
 
         /* */
-        osys->ch_display_size = true;
-        osys->display_width   = width;
-        osys->display_height  = height;
+        vlc_mutex_lock(&osys->lock);
+
+        osys->ch_display_size       = true;
+        osys->display_width         = width;
+        osys->display_height        = height;
+        osys->display_is_fullscreen = is_fullscreen;
+        osys->display_is_forced     = false;
+
+        vlc_mutex_unlock(&osys->lock);
         break;
     }
 
@@ -566,7 +593,10 @@ static void VoutDisplayEvent(vout_display_t *vd, int event, va_list args)
 
         /* */
         assert(vd->info.has_pictures_invalid);
+
+        vlc_mutex_lock(&osys->lock);
         osys->reset_pictures = true;
+        vlc_mutex_unlock(&osys->lock);
         break;
     }
     default:
@@ -597,22 +627,51 @@ void vout_ManageDisplay(vout_display_t *vd)
 
     /* Handle mouse timeout */
     const mtime_t date = mdate();
+    bool  hide_mouse = false;
+
+    vlc_mutex_lock(&osys->lock);
+
     if (!osys->mouse.is_hidden &&
         osys->mouse.last_moved + osys->mouse.hide_timeout < date) {
+        osys->mouse.is_hidden = hide_mouse = true;
+    } else if (osys->mouse.ch_activity) {
+        osys->mouse.is_hidden = false;
+    }
+    osys->mouse.ch_activity = false;
+    vlc_mutex_unlock(&osys->lock);
+
+    if (hide_mouse) {
         if (!vd->info.has_hide_mouse) {
             msg_Dbg(vd, "auto hidding mouse");
             vout_display_Control(vd, VOUT_DISPLAY_HIDE_MOUSE);
         }
-        osys->mouse.is_hidden = true;
-
         vout_SendEventMouseHidden(osys->vout);
     }
 
-    bool reset_pictures = false;
+    bool reset_render = false;
     for (;;) {
-        if (!osys->ch_fullscreen &&
-            !osys->ch_display_size &&
-            !osys->reset_pictures &&
+
+        vlc_mutex_lock(&osys->lock);
+
+        bool ch_fullscreen  = osys->ch_fullscreen;
+        bool is_fullscreen  = osys->is_fullscreen;
+        osys->ch_fullscreen = false;
+
+        bool ch_display_size       = osys->ch_display_size;
+        int  display_width         = osys->display_width;
+        int  display_height        = osys->display_height;
+        bool display_is_fullscreen = osys->display_is_fullscreen;
+        bool display_is_forced     = osys->display_is_forced;
+        osys->ch_display_size = false;
+
+        bool reset_pictures = osys->reset_pictures;
+        osys->reset_pictures = false;
+
+        vlc_mutex_unlock(&osys->lock);
+
+        if (!ch_fullscreen &&
+            !ch_display_size &&
+            !reset_pictures &&
             !osys->ch_display_filled &&
             !osys->ch_zoom &&
             !osys->ch_on_top &&
@@ -621,45 +680,45 @@ void vout_ManageDisplay(vout_display_t *vd)
             break;
 
         /* */
-        if (osys->ch_fullscreen) {
+        if (ch_fullscreen) {
             vout_display_cfg_t cfg = osys->cfg;
 
-            cfg.is_fullscreen = osys->is_fullscreen;
+            cfg.is_fullscreen  = is_fullscreen;
             cfg.display.width  = cfg.is_fullscreen ? 0 : osys->width_saved;
             cfg.display.height = cfg.is_fullscreen ? 0 : osys->height_saved;
 
             if (vout_display_Control(vd, VOUT_DISPLAY_CHANGE_FULLSCREEN, &cfg)) {
                 msg_Err(vd, "Failed to set fullscreen");
-                osys->is_fullscreen = osys->cfg.is_fullscreen;
+                is_fullscreen = osys->cfg.is_fullscreen;
             }
-            osys->cfg.is_fullscreen = osys->is_fullscreen;
-            osys->ch_fullscreen = false;
+            osys->cfg.is_fullscreen = is_fullscreen;
 
             /* */
             vout_SendEventFullscreen(osys->vout, osys->cfg.is_fullscreen);
         }
 
         /* */
-        if (osys->ch_display_size) {
+        if (ch_display_size) {
             vout_display_cfg_t cfg = osys->cfg;
-            cfg.display.width  = osys->display_width;
-            cfg.display.height = osys->display_height;
+            cfg.display.width  = display_width;
+            cfg.display.height = display_height;
 
-            if (vout_display_Control(vd, VOUT_DISPLAY_CHANGE_DISPLAY_SIZE, &cfg)) {
-                msg_Err(vd, "Failed to resize display");
+            if (!cfg.is_fullscreen != !display_is_fullscreen ||
+                vout_display_Control(vd, VOUT_DISPLAY_CHANGE_DISPLAY_SIZE, &cfg, display_is_forced)) {
+                if (!cfg.is_fullscreen == !display_is_fullscreen)
+                    msg_Err(vd, "Failed to resize display");
 
                 /* We ignore the resized */
-                osys->display_width  = osys->cfg.display.width;
-                osys->display_height = osys->cfg.display.height;
+                display_width  = osys->cfg.display.width;
+                display_height = osys->cfg.display.height;
             }
-            osys->cfg.display.width  = osys->display_width;
-            osys->cfg.display.height = osys->display_height;
+            osys->cfg.display.width  = display_width;
+            osys->cfg.display.height = display_height;
 
-            if (!osys->is_fullscreen) {
-                osys->width_saved  = osys->display_width;
-                osys->height_saved = osys->display_height;
+            if (!display_is_fullscreen) {
+                osys->width_saved  = display_width;
+                osys->height_saved = display_height;
             }
-            osys->ch_display_size = false;
         }
         /* */
         if (osys->ch_display_filled) {
@@ -696,9 +755,18 @@ void vout_ManageDisplay(vout_display_t *vd)
                 osys->zoom.num = osys->cfg.zoom.num;
                 osys->zoom.den = osys->cfg.zoom.den;
             } else if (cfg.is_display_filled) {
-                osys->ch_display_size = true;
-                osys->display_width  = (int64_t)vd->source.i_width  * osys->zoom.num / osys->zoom.den;
-                osys->display_height = (int64_t)vd->source.i_height * osys->zoom.num / osys->zoom.den;
+                const int display_width  = (int64_t)vd->source.i_width  * osys->zoom.num / osys->zoom.den;
+                const int display_height = (int64_t)vd->source.i_height * osys->zoom.num / osys->zoom.den;
+
+                vlc_mutex_lock(&osys->lock);
+
+                osys->ch_display_size       = true;
+                osys->display_width         = display_width;
+                osys->display_height        = display_height;
+                osys->display_is_fullscreen = osys->cfg.is_fullscreen;
+                osys->display_is_forced     = true;
+
+                vlc_mutex_unlock(&osys->lock);
             }
 
             osys->cfg.zoom.num = osys->zoom.num;
@@ -815,17 +883,15 @@ void vout_ManageDisplay(vout_display_t *vd)
         }
 
         /* */
-        if (osys->reset_pictures) {
+        if (reset_pictures) {
             if (vout_display_Control(vd, VOUT_DISPLAY_RESET_PICTURES)) {
                 /* FIXME what to do here ? */
                 msg_Err(vd, "Failed to reset pictures (probably fatal)");
             }
-            reset_pictures = true;
-
-            osys->reset_pictures = false;
+            reset_render = true;
         }
     }
-    if (reset_pictures)
+    if (reset_render)
         VoutDisplayResetRender(vd);
 }
 
@@ -833,7 +899,11 @@ bool vout_AreDisplayPicturesInvalid(vout_display_t *vd)
 {
     vout_display_owner_sys_t *osys = vd->owner.sys;
 
-    return osys->reset_pictures;
+    vlc_mutex_lock(&osys->lock);
+    const bool reset_pictures = osys->reset_pictures;
+    vlc_mutex_unlock(&osys->lock);
+
+    return reset_pictures;
 }
 
 bool vout_IsDisplayFiltered(vout_display_t *vd)
@@ -847,8 +917,7 @@ picture_t *vout_FilterDisplay(vout_display_t *vd, picture_t *picture)
 {
     vout_display_owner_sys_t *osys = vd->owner.sys;
 
-    if (!osys->filters)
-        return picture;
+    assert(osys->filters);
     return filter_chain_VideoFilter(osys->filters, picture);
 }
 
@@ -856,10 +925,12 @@ void vout_SetDisplayFullscreen(vout_display_t *vd, bool is_fullscreen)
 {
     vout_display_owner_sys_t *osys = vd->owner.sys;
 
+    vlc_mutex_lock(&osys->lock);
     if (!osys->is_fullscreen != !is_fullscreen) {
         osys->ch_fullscreen = true;
         osys->is_fullscreen = is_fullscreen;
     }
+    vlc_mutex_unlock(&osys->lock);
 }
 
 void vout_SetDisplayFilled(vout_display_t *vd, bool is_filled)
@@ -946,6 +1017,8 @@ static vout_display_t *DisplayNew(vout_thread_t *vout,
     osys->is_wrapper = is_wrapper;
     osys->wrapper = wrapper;
 
+    vlc_mutex_init(&osys->lock);
+
     vlc_mouse_Init(&osys->mouse.state);
     osys->mouse.last_moved = mdate();
     osys->mouse.double_click_timeout = double_click_timeout;
@@ -1031,6 +1104,7 @@ void vout_DeleteDisplay(vout_display_t *vd, vout_display_state_t *state)
     if (osys->is_wrapper)
         SplitterClose(vd);
     vout_display_Delete(vd);
+    vlc_mutex_destroy(&osys->lock);
     free(osys);
 }
 
@@ -1135,6 +1209,7 @@ static void SplitterPrepare(vout_display_t *vd, picture_t *picture)
 
     for (int i = 0; i < sys->count; i++) {
         /* */
+        /* FIXME now vout_FilterDisplay already return a direct buffer FIXME */
         sys->picture[i] = vout_FilterDisplay(sys->display[i], sys->picture[i]);
         if (!sys->picture[i])
             continue;

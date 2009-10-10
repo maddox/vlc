@@ -59,6 +59,7 @@ pluginsinclude_HEADERS = \
 	../include/vlc_config.h \
 	../include/vlc_config_cat.h \
 	../include/vlc_configuration.h \
+	../include/vlc_cpu.h \
 	../include/vlc_dialog.h \
 	../include/vlc_demux.h \
 	../include/vlc_epg.h \
@@ -88,6 +89,7 @@ pluginsinclude_HEADERS = \
 	../include/vlc_plugin.h \
 	../include/vlc_rand.h \
 	../include/vlc_services_discovery.h \
+	../include/vlc_sql.h \
 	../include/vlc_sout.h \
 	../include/vlc_stream.h \
 	../include/vlc_strings.h \
@@ -412,11 +414,13 @@ SOURCES_libvlc_common = \
 	misc/stats.c \
 	misc/cpu.c \
 	misc/action.c \
+	misc/epg.c \
 	config/configuration.h \
 	config/core.c \
 	config/chain.c \
 	config/file.c \
 	config/intf.c \
+	config/keys.c \
 	config/cmdline.c \
 	misc/events.c \
 	misc/image.c \
@@ -434,6 +438,7 @@ SOURCES_libvlc_common = \
 	misc/filter.c \
 	misc/filter_chain.c \
 	misc/http_auth.c \
+	misc/sql.c \
 	$(NULL)
 
 SOURCES_libvlc_httpd = \
@@ -507,14 +512,14 @@ revision.c: revision.txt
 	echo "const char psz_vlc_changeset[] = \"$$(cat revision.txt)\";" \
 		> revision.c
 
-revision.txt:
+revision.txt: Makefile.am
 	$(MAKE) stamp-revision
 	touch revision.txt
 
 stamp-revision:
 	rm -f -- revision.tmp
 	(git --git-dir="$(top_srcdir)/.git/" describe --tags --long \
-		--always || echo exported) > revision.tmp
+		--match '?.*.*' --always || echo exported) > revision.tmp
 	if diff revision.tmp revision.txt >/dev/null; then \
 		rm -f -- revision.tmp; \
 	else \

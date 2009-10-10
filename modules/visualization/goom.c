@@ -137,13 +137,13 @@ static int Open( vlc_object_t *p_this )
     video_format_t     fmt;
 
 
-    if( p_filter->input.i_format != VLC_CODEC_FL32 ||
-         p_filter->output.i_format != VLC_CODEC_FL32 )
+    if( p_filter->fmt_in.audio.i_format != VLC_CODEC_FL32 ||
+         p_filter->fmt_out.audio.i_format != VLC_CODEC_FL32 )
     {
         msg_Warn( p_filter, "bad input or output format" );
         return VLC_EGENERIC;
     }
-    if( !AOUT_FMTS_SIMILAR( &p_filter->input, &p_filter->output ) )
+    if( !AOUT_FMTS_SIMILAR( &p_filter->fmt_in.audio, &p_filter->fmt_out.audio ) )
     {
         msg_Warn( p_filter, "input and output formats are not similar" );
         return VLC_EGENERIC;
@@ -184,9 +184,9 @@ static int Open( vlc_object_t *p_this )
     vlc_cond_init( &p_thread->wait );
 
     p_thread->i_blocks = 0;
-    date_Init( &p_thread->date, p_filter->output.i_rate, 1 );
+    date_Init( &p_thread->date, p_filter->fmt_out.audio.i_rate, 1 );
     date_Set( &p_thread->date, 0 );
-    p_thread->i_channels = aout_FormatNbChannels( &p_filter->input );
+    p_thread->i_channels = aout_FormatNbChannels( &p_filter->fmt_in.audio );
 
     p_thread->psz_title = TitleGet( VLC_OBJECT( p_filter ) );
 
@@ -221,7 +221,7 @@ static void DoWork( aout_instance_t * p_aout, aout_filter_t * p_filter,
     block_t *p_block;
 
     p_out_buf->i_nb_samples = p_in_buf->i_nb_samples;
-    p_out_buf->i_nb_bytes = p_in_buf->i_nb_bytes;
+    p_out_buf->i_buffer = p_in_buf->i_buffer;
 
     /* Queue sample */
     vlc_mutex_lock( &p_sys->p_thread->lock );
@@ -231,14 +231,14 @@ static void DoWork( aout_instance_t * p_aout, aout_filter_t * p_filter,
         return;
     }
 
-    p_block = block_New( p_sys->p_thread, p_in_buf->i_nb_bytes );
+    p_block = block_New( p_sys->p_thread, p_in_buf->i_buffer );
     if( !p_block )
     {
         vlc_mutex_unlock( &p_sys->p_thread->lock );
         return;
     }
-    memcpy( p_block->p_buffer, p_in_buf->p_buffer, p_in_buf->i_nb_bytes );
-    p_block->i_pts = p_in_buf->start_date;
+    memcpy( p_block->p_buffer, p_in_buf->p_buffer, p_in_buf->i_buffer );
+    p_block->i_pts = p_in_buf->i_pts;
 
     p_sys->p_thread->pp_blocks[p_sys->p_thread->i_blocks++] = p_block;
 

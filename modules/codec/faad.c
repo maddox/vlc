@@ -31,6 +31,7 @@
 #include <vlc_input.h>
 #include <vlc_aout.h>
 #include <vlc_codec.h>
+#include <vlc_cpu.h>
 
 #include <faad.h>
 
@@ -231,8 +232,17 @@ static aout_buffer_t *DecodeBlock( decoder_t *p_dec, block_t **pp_block )
     /* Append the block to the temporary buffer */
     if( p_sys->i_buffer_size < p_sys->i_buffer + p_block->i_buffer )
     {
-        p_sys->i_buffer_size = p_sys->i_buffer + p_block->i_buffer;
-        p_sys->p_buffer = realloc( p_sys->p_buffer, p_sys->i_buffer_size );
+        size_t  i_buffer_size = p_sys->i_buffer + p_block->i_buffer;
+        uint8_t *p_buffer     = realloc( p_sys->p_buffer, i_buffer_size );
+        if( p_buffer )
+        {
+            p_sys->i_buffer_size = i_buffer_size;
+            p_sys->p_buffer      = p_buffer;
+        }
+        else
+        {
+            p_block->i_buffer = 0;
+        }
     }
 
     if( p_block->i_buffer > 0 )
@@ -413,8 +423,10 @@ static aout_buffer_t *DecodeBlock( decoder_t *p_dec, block_t **pp_block )
             return NULL;
         }
 
-        p_out->start_date = date_Get( &p_sys->date );
-        p_out->end_date = date_Increment( &p_sys->date, frame.samples / frame.channels );
+        p_out->i_pts = date_Get( &p_sys->date );
+        p_out->i_length = date_Increment( &p_sys->date,
+                                          frame.samples / frame.channels )
+                          - p_out->i_pts;
 
         DoReordering( (uint32_t *)p_out->p_buffer, samples,
                       frame.samples / frame.channels, frame.channels,

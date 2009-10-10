@@ -1,22 +1,30 @@
-Changes between 1.0.1 and 1.1.0-git:
+Changes between 1.0.2 and 1.1.0-git:
 ------------------------------------
 
 Access:
  * Port of the screen module from Xlib to XCB
+
+Decoders:
+ * Support for Atrac1
+ * HD dvb subtitles - Display Definition Segment support
+ * Invmem modules improvements
 
 Demuxers:
  * Support for ADPCM in .flv streams
  * EXPERIMENTAL support for .aob files from DVD-Audio (MLP and LPCM)
    (Full disc support is NOT present yet)
  * Support for TwinVQ (.vqf) files
+ * Various EGP improvements
 
 Playlist:
  * WPL playlist support
  * ZPL playlist support
- * Lua scripts for Mpora and Vimeo playback
+ * Lua scripts for Mpora, Vimeo playback and Rockbox FM radios
+ * New Play-And-Pause function to stop playback on latest video image
 
 Audio filters:
  * Chorus/Flanger audio filter
+ * 3F1R to stereo downmix filter
 
 Encoders:
  * x264, add psy-rd parameter and change default settings
@@ -24,11 +32,14 @@ Encoders:
     #transcode{vcodec=h264,venc=x264{profile=baseline,level=1.2},vb=384,width=320,height=176}
  * x264, defaults to crf=23 as x264.exe-does, if bitrate is given,
    uses ABR and if qp-value is set uses CQP
+ * libx264-version 0.76 or higher is required
 
 Video Output:
+ * Rewrite of the video output core and most video outputs
  * Added desktop mode to the Direct3D output module. It differs from DirectX
    desktop mode, because it hides the desktop icons, but reacts to mouse clicks.
  * New x11 and xv modules based on XCB
+ * New deinterlacing modes based on yadif and yadif(x2)
 
 Visualisation:
  * Support of .milk visualisation files using projectM libraries
@@ -36,11 +47,17 @@ Visualisation:
 Service discovery:
  * Service discovery for Picture/Music/Video user directories
 
+Stream output:
+ * New smem module, streaming to memory
+
 Mac OS X Interface:
  * Completely reworked user interface (based upon works from GSoC 2008)
 
 Windows port:
  * Integration in Windows 7 taskbar
+
+Maemo port:
+ * Multiple improvements for N900 compliance and efficiency
 
 Removed modules:
  * csri
@@ -49,6 +66,58 @@ Removed modules:
  * transrate
  * x11, xvideo, xvid
  * gtk_main, gtk_main2, gnome_main, gnome_main2 and pda interface
+
+
+Changes between 1.0.1 and 1.0.2:
+--------------------------------
+
+Decoders:
+ * Native support for WMA Professional, without the use of the Win32 dlls
+ * Fix issues in subtitles, especially SSA ones
+ * Various fixes on theora and ogg
+
+Demuxers:
+ * Various fixes for EPG support in MPEG-TS demuxer
+ * Fixes for potential stack overflow in .avi, .mp4 and .asf demuxers
+
+Access:
+ * Fixes for v4l2 devices
+ * Fixes for dvb-c channels-scanning
+
+Qt Interface:
+ * Fix some playlist sorting issues
+
+Mac OS X Interface:
+ * Fixed a crash when updating VLC
+ * Fixed a crash related to QTKit when opening video files (10.6 only)
+ * Added the ability to play 2nd media in sync to the primary item (input-slave)
+ * Added the "Quit after Playback" feature
+
+Mac OS X Port:
+ * The "Delete Preferences" script is now delivered as a Universal Binary
+   with native code for PowerPC, Intel and Intel 64bit
+ * Full 64bit runtime compatibility on both Mac OS X 10.5 and 10.6
+   - no support for Goom and SDL
+   - limited text rendering support
+   - This port is still considered as EXPERIMENTAL despite its binary release.
+
+Encoders:
+ * MPEG2 transrate stream output removed
+ * x264 default-values closer to x264.exe defaults.
+ * x264 rc-behaviour fixes:
+   - if user defines qp-value, CQP-mode is used
+   - otherwise if user defines vb=0, CRF-mode is used
+   - otherwise ABR-mode is used
+ * x264 set vbv-bufsize/vbv-maxsize better if user hasn't defined these:
+   - ABR mode set vbv-max-bitrate=bitrate
+   - vbv-bufsize is bitrate * seconds between keyframes (keyint/fps)
+
+
+Playlist:
+ * Lua scripts for Mpora and Vimeo playback
+
+Unix builds:
+ * Various fixes to enable 1.0 to build on Solaris and OpenBSD
 
 
 Changes between 1.0.0 and 1.0.1:
@@ -218,6 +287,8 @@ Video output:
 Miscellaneous:
  * Invmem, a fake codec to display images from external applications
 
+New Localization:
+ * Mongolian
 
 Changes between 0.9.9 and 0.9.9a:
 ---------------------------------

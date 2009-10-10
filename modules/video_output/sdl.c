@@ -344,7 +344,7 @@ static int Open(vlc_object_t *object)
     vd->manage  = Manage;
 
     /* */
-    vout_display_SendEventDisplaySize(vd, display_width, display_height);
+    vout_display_SendEventDisplaySize(vd, display_width, display_height, vd->cfg->is_fullscreen);
     return VLC_SUCCESS;
 
 error:
@@ -477,11 +477,13 @@ static int Control(vout_display_t *vd, int query, va_list args)
 
     case VOUT_DISPLAY_CHANGE_DISPLAY_SIZE: {
         const vout_display_cfg_t *cfg = va_arg(args, const vout_display_cfg_t *);
+        const bool is_forced = (bool)va_arg(args, int);
 
         /* */
-        sys->display = SDL_SetVideoMode(cfg->display.width,
-                                        cfg->display.height,
-                                        sys->display_bpp, sys->display_flags);
+        if (is_forced)
+            sys->display = SDL_SetVideoMode(cfg->display.width,
+                                            cfg->display.height,
+                                            sys->display_bpp, sys->display_flags);
         if (!sys->display) {
             sys->display = SDL_SetVideoMode(vd->cfg->display.width,
                                             vd->cfg->display.height,
@@ -512,7 +514,7 @@ static int Control(vout_display_t *vd, int query, va_list args)
 
             vout_display_PlacePicture(&sys->place, &vd->source, &cfg, !sys->overlay);
         }
-        vout_display_SendEventDisplaySize(vd, cfg.display.width, cfg.display.height);
+        vout_display_SendEventDisplaySize(vd, cfg.display.width, cfg.display.height, cfg.is_fullscreen);
         return VLC_SUCCESS;
     }
     case VOUT_DISPLAY_CHANGE_ZOOM:
@@ -652,7 +654,7 @@ static void Manage(vout_display_t *vd)
         }
 
         case SDL_VIDEORESIZE:
-            vout_display_SendEventDisplaySize(vd, event.resize.w, event.resize.h);
+            vout_display_SendEventDisplaySize(vd, event.resize.w, event.resize.h, vd->cfg->is_fullscreen);
             break;
 
         default:
@@ -682,7 +684,7 @@ static const struct {
 
     { SDLK_RETURN, KEY_ENTER },
     { SDLK_KP_ENTER, KEY_ENTER },
-    { SDLK_SPACE, KEY_SPACE },
+    { SDLK_SPACE, ' ' },
     { SDLK_ESCAPE, KEY_ESC },
 
     { SDLK_MENU, KEY_MENU },

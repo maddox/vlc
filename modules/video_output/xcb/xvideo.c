@@ -93,6 +93,7 @@ struct vout_display_sys_t
     uint16_t height;     /* display height */
     uint32_t data_size;  /* picture byte size (for non-SHM) */
     bool shm;            /* whether to use MIT-SHM */
+    bool visible;        /* whether it makes sense to draw at all */
 
     xcb_xv_query_image_attributes_reply_t *att;
     picture_pool_t *pool; /* picture pool */
@@ -339,6 +340,7 @@ static int Open (vlc_object_t *obj)
          xcb_xv_adaptor_info_next (&it))
     {
         const xcb_xv_adaptor_info_t *a = it.data;
+        char *name;
 
         if (forced_adaptor != -1 && forced_adaptor != 0)
         {
@@ -407,6 +409,12 @@ static int Open (vlc_object_t *obj)
         continue;
 
     grabbed_port:
+        name = strndup (xcb_xv_adaptor_info_name (a), a->name_size);
+        if (name != NULL)
+        {
+            msg_Dbg (vd, "using adaptor %s", name);
+            free (name);
+        }
         msg_Dbg (vd, "using port %"PRIu32, p_sys->port);
 
         p_sys->id = xfmt->id;
@@ -433,7 +441,7 @@ static int Open (vlc_object_t *obj)
         const uint32_t mask =
             /* XCB_CW_EVENT_MASK */
             XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
-            XCB_EVENT_MASK_POINTER_MOTION;
+            XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_VISIBILITY_CHANGE;
         xcb_void_cookie_t c;
         xcb_window_t window = xcb_generate_id (conn);
 
@@ -445,7 +453,7 @@ static int Open (vlc_object_t *obj)
         if (CheckError (vd, conn, "cannot create X11 window", c))
             goto error;
         p_sys->window = window;
-        msg_Dbg (vd, "using X11 window %08"PRIx32, window);
+        msg_Dbg (vd, "using X11 window 0x%08"PRIx32, window);
         xcb_map_window (conn, window);
 
         vout_display_place_t place;
@@ -461,11 +469,12 @@ static int Open (vlc_object_t *obj)
                               XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT,
                               values);
     }
+    p_sys->visible = false;
 
     /* Create graphic context */
     p_sys->gc = xcb_generate_id (conn);
     xcb_create_gc (conn, p_sys->gc, p_sys->window, 0, NULL);
-    msg_Dbg (vd, "using X11 graphic context %08"PRIx32, p_sys->gc);
+    msg_Dbg (vd, "using X11 graphic context 0x%08"PRIx32, p_sys->gc);
 
     /* */
     p_sys->pool = NULL;
@@ -485,10 +494,10 @@ static int Open (vlc_object_t *obj)
     vd->manage = Manage;
 
     /* */
+    vout_display_SendEventFullscreen (vd, false);
     unsigned width, height;
     if (!GetWindowSize (p_sys->embed, conn, &width, &height))
-        vout_display_SendEventDisplaySize (vd, width, height);
-    vout_display_SendEventFullscreen (vd, false);
+        vout_display_SendEventDisplaySize (vd, width, height, false);
 
     return VLC_SUCCESS;
 
@@ -606,6 +615,8 @@ static void Display (vout_display_t *vd, picture_t *pic)
     xcb_shm_seg_t segment = pic->p_sys->segment;
     xcb_void_cookie_t ck;
 
+    if (!p_sys->visible)
+        goto out;
     if (segment)
         ck = xcb_xv_shm_put_image_checked (p_sys->conn, p_sys->port,
                               p_sys->window, p_sys->gc, segment, p_sys->id, 0,
@@ -635,7 +646,7 @@ static void Display (vout_display_t *vd, picture_t *pic)
         msg_Dbg (vd, "%s: X11 error %d", "cannot put image", e->error_code);
         free (e);
     }
-
+out:
     picture_Release (pic);
 }
 
@@ -659,6 +670,7 @@ static int Control (vout_display_t *vd, int query, va_list ap)
     {
         const vout_display_cfg_t *cfg;
         const video_format_t *source;
+        bool is_forced;
 
         if (query == VOUT_DISPLAY_CHANGE_SOURCE_ASPECT
          || query == VOUT_DISPLAY_CHANGE_SOURCE_CROP)
@@ -670,10 +682,13 @@ static int Control (vout_display_t *vd, int query, va_list ap)
         {
             source = &vd->source;
             cfg = (const vout_display_cfg_t*)va_arg (ap, const vout_display_cfg_t *);
+            if (query == VOUT_DISPLAY_CHANGE_DISPLAY_SIZE)
+                is_forced = (bool)va_arg (ap, int);
         }
 
         /* */
         if (query == VOUT_DISPLAY_CHANGE_DISPLAY_SIZE
+         && is_forced
          && (cfg->display.width  != vd->cfg->display.width
            ||cfg->display.height != vd->cfg->display.height)
          && vout_window_SetSize (p_sys->embed,
@@ -720,6 +735,6 @@ static void Manage (vout_display_t *vd)
 {
     vout_display_sys_t *p_sys = vd->sys;
 
-    ManageEvent (vd, p_sys->conn, p_sys->window);
+    ManageEvent (vd, p_sys->conn, &p_sys->visible);
 }
 

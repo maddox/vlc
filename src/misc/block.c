@@ -65,7 +65,7 @@ void block_Init( block_t *restrict b, void *buf, size_t size )
     b->i_dts = VLC_TS_INVALID;
     b->i_length = 0;
     b->i_rate = 0;
-    b->i_samples = 0;
+    b->i_nb_samples = 0;
     b->p_buffer = buf;
     b->i_buffer = size;
 #ifndef NDEBUG
@@ -86,13 +86,13 @@ static void BlockMetaCopy( block_t *restrict out, const block_t *in )
     out->i_flags   = in->i_flags;
     out->i_length  = in->i_length;
     out->i_rate    = in->i_rate;
-    out->i_samples = in->i_samples;
+    out->i_nb_samples = in->i_nb_samples;
 }
 
-/* Memory alignment */
+/* Memory alignment (must be a multiple of sizeof(void*) and a power of two) */
 #define BLOCK_ALIGN        16
-/* Initial size of reserved header and footer */
-#define BLOCK_PADDING_SIZE 32
+/* Initial reserved header and footer size (must be multiple of alignment) */
+#define BLOCK_PADDING      32
 /* Maximum size of reserved footer before we release with realloc() */
 #define BLOCK_WASTE_SIZE   2048
 
@@ -100,24 +100,41 @@ block_t *block_Alloc( size_t i_size )
 {
     /* We do only one malloc
      * TODO: bench if doing 2 malloc but keeping a pool of buffer is better
-     * TODO: use memalign
-     * 16 -> align on 16
-     * 2 * BLOCK_PADDING_SIZE -> pre + post padding
+     * 2 * BLOCK_PADDING -> pre + post padding
      */
-    const size_t i_alloc = i_size + 2 * BLOCK_PADDING_SIZE + BLOCK_ALIGN;
-    block_sys_t *p_sys = malloc( sizeof( *p_sys ) + i_alloc );
+    block_sys_t *p_sys;
+    uint8_t *buf;
 
+#define ALIGN(x) (((x) + BLOCK_ALIGN - 1) & ~(BLOCK_ALIGN - 1))
+#if 0 /*def HAVE_POSIX_MEMALIGN */
+    /* posix_memalign(,16,) is much slower than malloc() on glibc.
+     * -- Courmisch, September 2009, glibc 2.5 & 2.9 */
+    const size_t i_alloc = ALIGN(sizeof(*p_sys)) + (2 * BLOCK_PADDING)
+                         + ALIGN(i_size);
+    void *ptr;
+
+    if( posix_memalign( &ptr, BLOCK_ALIGN, i_alloc ) )
+        return NULL;
+
+    p_sys = ptr;
+    buf = p_sys->p_allocated_buffer + (-sizeof(*p_sys) & (BLOCK_ALIGN - 1));
+
+#else
+    const size_t i_alloc = sizeof(*p_sys) + BLOCK_ALIGN + (2 * BLOCK_PADDING)
+                         + ALIGN(i_size);
+    p_sys = malloc( i_alloc );
     if( p_sys == NULL )
         return NULL;
 
-    /* Fill opaque data */
-    p_sys->i_allocated_buffer = i_alloc;
+    buf = (void *)ALIGN((uintptr_t)p_sys->p_allocated_buffer);
 
-    block_Init( &p_sys->self, p_sys->p_allocated_buffer + BLOCK_PADDING_SIZE
-                + BLOCK_ALIGN
-                - ((uintptr_t)p_sys->p_allocated_buffer % BLOCK_ALIGN),
-                i_size );
+#endif
+    buf += BLOCK_PADDING;
+
+    block_Init( &p_sys->self, buf, i_size );
     p_sys->self.pf_release    = BlockRelease;
+    /* Fill opaque data */
+    p_sys->i_allocated_buffer = i_alloc - sizeof(*p_sys);
 
     return &p_sys->self;
 }
@@ -198,7 +215,6 @@ block_t *block_Realloc( block_t *p_block, ssize_t i_prebody, size_t i_body )
     if( (size_t)(p_block->p_buffer - p_start) < (size_t)i_prebody
      || (size_t)(p_end - p_block->p_buffer) < i_body )
     {
-        /* FIXME: this is really dumb, we should use realloc() */
         block_t *p_rea = block_Alloc( requested );
         if( p_rea )
         {
@@ -208,6 +224,8 @@ block_t *block_Realloc( block_t *p_block, ssize_t i_prebody, size_t i_body )
             memcpy( p_rea->p_buffer, p_block->p_buffer, p_block->i_buffer );
         }
         block_Release( p_block );
+        if( p_rea == NULL )
+            return NULL;
         p_block = p_rea;
     }
     else
@@ -215,16 +233,15 @@ block_t *block_Realloc( block_t *p_block, ssize_t i_prebody, size_t i_body )
      * XXX it might not preserve the alignment of p_buffer */
     if( p_end - (p_block->p_buffer + i_body) > BLOCK_WASTE_SIZE )
     {
-        const ptrdiff_t i_prebody = p_block->p_buffer - p_start;
-        const size_t i_new = requested + 1 * BLOCK_PADDING_SIZE;
-        block_sys_t *p_new = realloc( p_sys, sizeof (*p_sys) + i_new );
-
-        if( p_new != NULL )
+        block_t *p_rea = block_Alloc( requested );
+        if( p_rea )
         {
-            p_sys = p_new;
-            p_sys->i_allocated_buffer = i_new;
-            p_block = &p_sys->self;
-            p_block->p_buffer = &p_sys->p_allocated_buffer[i_prebody];
+            BlockMetaCopy( p_rea, p_block );
+            p_rea->p_buffer += i_prebody;
+            p_rea->i_buffer -= i_prebody;
+            memcpy( p_rea->p_buffer, p_block->p_buffer, p_block->i_buffer );
+            block_Release( p_block );
+            p_block = p_rea;
         }
     }
 

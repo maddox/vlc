@@ -31,6 +31,7 @@
 #endif
 
 #include <vlc_common.h>
+#include <vlc_cpu.h>
 
 #include <sys/types.h>
 #ifndef WIN32
@@ -81,7 +82,7 @@ static bool check_OS_capability( const char *psz_capability, pid_t pid )
  *****************************************************************************/
 uint32_t CPUCapabilities( void )
 {
-    uint32_t i_capabilities = CPU_CAPABILITY_NONE;
+    uint32_t i_capabilities = 0;
 
 #if defined( __i386__ ) || defined( __x86_64__ )
      unsigned int i_eax, i_ebx, i_ecx, i_edx;
@@ -197,6 +198,24 @@ uint32_t CPUCapabilities( void )
         }
         if( check_OS_capability( "SSE2", pid ) )
             i_capabilities |= CPU_CAPABILITY_SSE2;
+    }
+# endif
+
+# if defined (__SSE3__)
+    i_capabilities |= CPU_CAPABILITY_SSE3;
+# elif defined (CAN_COMPILE_SSE3)
+    if( i_ecx & 0x00000001 )
+    {
+        /* We test if OS supports the SSE3 instructions */
+        pid_t pid = fork();
+        if( pid == 0 )
+        {
+            /* Test a SSE3 instruction */
+            __asm__ __volatile__ ( "movsldup %%xmm1, %%xmm0\n" : : );
+            exit(0);
+        }
+        if( check_OS_capability( "SSE3", pid ) )
+            i_capabilities |= CPU_CAPABILITY_SSE3;
     }
 # endif
 

@@ -559,8 +559,9 @@ static aout_buffer_t *DecodePacket( decoder_t *p_dec, ogg_packet *p_oggpacket )
         vorbis_synthesis_read( &p_sys->vd, i_samples );
 
         /* Date management */
-        p_aout_buffer->start_date = date_Get( &p_sys->end_date );
-        p_aout_buffer->end_date = date_Increment( &p_sys->end_date, i_samples );
+        p_aout_buffer->i_pts = date_Get( &p_sys->end_date );
+        p_aout_buffer->i_length = date_Increment( &p_sys->end_date,
+                                           i_samples ) - p_aout_buffer->i_pts;
         return p_aout_buffer;
     }
     else
@@ -785,7 +786,6 @@ static int OpenEncoder( vlc_object_t *p_this )
     encoder_sys_t *p_sys;
     int i_quality, i_min_bitrate, i_max_bitrate, i;
     ogg_packet header[3];
-    vlc_value_t val;
     uint8_t *p_extra;
 
     if( p_enc->fmt_out.i_codec != VLC_CODEC_VORBIS &&
@@ -805,16 +805,13 @@ static int OpenEncoder( vlc_object_t *p_this )
 
     config_ChainParse( p_enc, ENC_CFG_PREFIX, ppsz_enc_options, p_enc->p_cfg );
 
-    var_Get( p_enc, ENC_CFG_PREFIX "quality", &val );
-    i_quality = val.i_int;
+    i_quality = var_GetInteger( p_enc, ENC_CFG_PREFIX "quality" );
     if( i_quality > 10 ) i_quality = 10;
     if( i_quality < 0 ) i_quality = 0;
-    var_Get( p_enc, ENC_CFG_PREFIX "cbr", &val );
-    if( val.b_bool ) i_quality = 0;
-    var_Get( p_enc, ENC_CFG_PREFIX "max-bitrate", &val );
-    i_max_bitrate = val.i_int;
-    var_Get( p_enc, ENC_CFG_PREFIX "min-bitrate", &val );
-    i_min_bitrate = val.i_int;
+
+    if( var_GetBool( p_enc, ENC_CFG_PREFIX "cbr" ) ) i_quality = 0;
+    i_max_bitrate = var_GetInteger( p_enc, ENC_CFG_PREFIX "max-bitrate" );
+    i_min_bitrate = var_GetInteger( p_enc, ENC_CFG_PREFIX "min-bitrate" );
 
     /* Initialize vorbis encoder */
     vorbis_info_init( &p_sys->vi );
@@ -915,7 +912,7 @@ static block_t *Encode( encoder_t *p_enc, aout_buffer_t *p_aout_buf )
     int i;
     unsigned int j;
 
-    p_sys->i_pts = p_aout_buf->start_date -
+    p_sys->i_pts = p_aout_buf->i_pts -
                 (mtime_t)1000000 * (mtime_t)p_sys->i_samples_delay /
                 (mtime_t)p_enc->fmt_in.audio.i_rate;
 

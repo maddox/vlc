@@ -115,11 +115,11 @@ endif
 #
 ifdef HAVE_WIN32
 HOSTCONF+= --without-pic --disable-shared --enable-msw --disable-dependency-tracking
-FFMPEGCONF+= --target-os=mingw32 --enable-memalign-hack --cpu=i686 --arch=i686
+FFMPEGCONF+= --target-os=mingw32 --enable-memalign-hack
 ifdef HAVE_WIN64
 FFMPEGCONF+= --cpu=athlon64 --arch=x86_64
 else
-FFMPEGCONF+= --cpu=i686 --arch=x86_32
+FFMPEGCONF+= --cpu=i686
 endif
 endif
 
@@ -761,14 +761,8 @@ else
 endif
 endif
 	patch -p0 < Patches/libtheora-includes.patch
-ifdef HAVE_WIN32
-	patch -p0 < Patches/theora-doc.patch
-endif
 
 THEORACONF = --disable-sdltest --disable-oggtest --disable-vorbistest --disable-examples
-ifdef HAVE_WIN32
-THEORACONF += --disable-docs
-endif
 
 ifdef HAVE_DARWIN_64
 THEORACONF += --disable-asm
@@ -1028,7 +1022,7 @@ ifdef HAVE_DARWIN_OS
 ifdef HAVE_DARWIN_OS_ON_INTEL
 	(cd $@; patch -p0 < ../Patches/ffmpeg-macosx-intel-mmx.patch)
 else
-	(cd $@; patch -p0 < ../Patches/ffmpeg-darwin-ppc-mdynamic.patch) 
+	(cd $@; patch -p0 < ../Patches/ffmpeg-darwin-ppc-mdynamic.patch)
 endif
 endif
 ifdef HAVE_UCLIBC
@@ -1065,7 +1059,7 @@ FFMPEGCONF += \
 	--disable-protocols \
 	--disable-network
 ifdef HAVE_WIN32
-FFMPEGCONF += --disable-bzlib --disable-decoder=dca --disable-encoder=ac3
+FFMPEGCONF += --disable-bzlib --disable-decoder=dca --disable-encoder=ac3 --enable-libmp3lame
 endif
 
 ifdef HAVE_WINCE
@@ -1077,7 +1071,7 @@ else
 .ffmpeg: ffmpeg .lame .gsm
 endif
 endif
-	(cd $<; $(HOSTCC) ./configure $(FFMPEGCONF) --prefix=$(PREFIX) --extra-cflags="$(CFLAGS) $(FFMPEG_CFLAGS)" --extra-ldflags="$(LDFLAGS)" $(FFMPEGCONF) --disable-shared --enable-static && make && make install-libs install-headers)
+	(cd $<; $(HOSTCC) ./configure --prefix=$(PREFIX) --extra-cflags="$(CFLAGS) $(FFMPEG_CFLAGS)" --extra-ldflags="$(LDFLAGS)" $(FFMPEGCONF) --disable-shared --enable-static && make && make install-libs install-headers)
 	touch $@
 
 ifdef SVN
@@ -2580,7 +2574,20 @@ xcb-util: xcb-util-$(XCB_UTIL_VERSION).tar.bz2
 	cd $< && make install
 	touch $@
 
+# ***************************************************************************
+# Peflags utility (Windows only)
+# ***************************************************************************
 
+peflags.c:
+	$(WGET) $(PEFLAGS_URL)/$@
+
+.peflags: peflags.c
+	rm -rf peflags
+	mkdir peflags && mv peflags.c peflags/
+	cd peflags && gcc peflags.c -o peflags
+	install -d $(PREFIX)/bin
+	cd peflags && install ./peflags $(PREFIX)/bin
+CLEAN_PKG +=peflags
 # ***************************************************************************
 # Some cleaning
 # ***************************************************************************

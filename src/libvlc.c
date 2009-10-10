@@ -86,6 +86,8 @@
 #include "audio_output/aout_internal.h"
 
 #include <vlc_charset.h>
+#include <vlc_cpu.h>
+#include <vlc_url.h>
 
 #include "libvlc.h"
 
@@ -298,7 +300,6 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
                          const char *ppsz_argv[] )
 {
     libvlc_priv_t *priv = libvlc_priv (p_libvlc);
-    char         p_capabilities[200];
     char *       p_tmp = NULL;
     char *       psz_modules = NULL;
     char *       psz_parser = NULL;
@@ -306,7 +307,7 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
     bool   b_exit = false;
     int          i_ret = VLC_EEXIT;
     playlist_t  *p_playlist = NULL;
-    vlc_value_t  val;
+    char        *psz_val;
 #if defined( ENABLE_NLS ) \
      && ( defined( HAVE_GETTEXT ) || defined( HAVE_INCLUDED_GETTEXT ) )
 # if defined (WIN32) || defined (__APPLE__)
@@ -740,6 +741,16 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
     if( !config_GetInt( p_libvlc, "fpu" ) )
         cpu_flags &= ~CPU_CAPABILITY_FPU;
 
+    char p_capabilities[200];
+#define PRINT_CAPABILITY( capability, string )                              \
+    if( vlc_CPU() & capability )                                            \
+    {                                                                       \
+        strncat( p_capabilities, string " ",                                \
+                 sizeof(p_capabilities) - strlen(p_capabilities) );         \
+        p_capabilities[sizeof(p_capabilities) - 1] = '\0';                  \
+    }
+    p_capabilities[0] = '\0';
+
 #if defined( __i386__ ) || defined( __x86_64__ )
     if( !config_GetInt( p_libvlc, "mmx" ) )
         cpu_flags &= ~CPU_CAPABILITY_MMX;
@@ -751,27 +762,27 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
         cpu_flags &= ~CPU_CAPABILITY_SSE;
     if( !config_GetInt( p_libvlc, "sse2" ) )
         cpu_flags &= ~CPU_CAPABILITY_SSE2;
-#endif
-#if defined( __powerpc__ ) || defined( __ppc__ ) || defined( __ppc64__ )
-    if( !config_GetInt( p_libvlc, "altivec" ) )
-        cpu_flags &= ~CPU_CAPABILITY_ALTIVEC;
-#endif
+    if( !config_GetInt( p_libvlc, "sse3" ) )
+        cpu_flags &= ~CPU_CAPABILITY_SSE3;
 
-#define PRINT_CAPABILITY( capability, string )                              \
-    if( vlc_CPU() & capability )                                            \
-    {                                                                       \
-        strncat( p_capabilities, string " ",                                \
-                 sizeof(p_capabilities) - strlen(p_capabilities) );         \
-        p_capabilities[sizeof(p_capabilities) - 1] = '\0';                  \
-    }
-
-    p_capabilities[0] = '\0';
     PRINT_CAPABILITY( CPU_CAPABILITY_MMX, "MMX" );
     PRINT_CAPABILITY( CPU_CAPABILITY_3DNOW, "3DNow!" );
     PRINT_CAPABILITY( CPU_CAPABILITY_MMXEXT, "MMXEXT" );
     PRINT_CAPABILITY( CPU_CAPABILITY_SSE, "SSE" );
     PRINT_CAPABILITY( CPU_CAPABILITY_SSE2, "SSE2" );
+    PRINT_CAPABILITY( CPU_CAPABILITY_SSE3, "SSE3" );
+
+#elif defined( __powerpc__ ) || defined( __ppc__ ) || defined( __ppc64__ )
+    if( !config_GetInt( p_libvlc, "altivec" ) )
+        cpu_flags &= ~CPU_CAPABILITY_ALTIVEC;
+
     PRINT_CAPABILITY( CPU_CAPABILITY_ALTIVEC, "AltiVec" );
+
+#elif defined( __arm__ )
+    PRINT_CAPABILITY( CPU_CAPABILITY_NEON, "NEONv1" );
+
+#endif
+
     PRINT_CAPABILITY( CPU_CAPABILITY_FPU, "FPU" );
     msg_Dbg( p_libvlc, "CPU has capabilities %s", p_capabilities );
 
@@ -1000,16 +1011,15 @@ int libvlc_InternalInit( libvlc_int_t *p_libvlc, int i_argc,
     /*
      * Get --open argument
      */
-    var_Create( p_libvlc, "open", VLC_VAR_STRING | VLC_VAR_DOINHERIT );
-    var_Get( p_libvlc, "open", &val );
-    if ( val.psz_string != NULL && *val.psz_string )
+    psz_val = var_CreateGetString( p_libvlc, "open" );
+    if ( psz_val != NULL && *psz_val )
     {
         playlist_t *p_playlist = pl_Hold( p_libvlc );
-        playlist_AddExt( p_playlist, val.psz_string, NULL, PLAYLIST_INSERT, 0,
+        playlist_AddExt( p_playlist, psz_val, NULL, PLAYLIST_INSERT, 0,
                          -1, 0, NULL, 0, true, pl_Unlocked );
         pl_Release( p_libvlc );
     }
-    free( val.psz_string );
+    free( psz_val );
 
     return VLC_SUCCESS;
 }
@@ -1048,7 +1058,7 @@ void libvlc_InternalCleanup( libvlc_int_t *p_libvlc )
     /* Any thread still running must not assume pl_Hold() succeeds. */
     msg_Dbg( p_libvlc, "removing playlist" );
 
-    libvlc_priv(p_playlist->p_libvlc)->p_playlist = NULL;
+    libvlc_priv(p_libvlc)->p_playlist = NULL;
     barrier();  /* FIXME is that correct ? */
 
     vlc_object_release( p_playlist );
@@ -1295,13 +1305,16 @@ static int GetFilenames( libvlc_int_t *p_vlc, int i_argc, const char *ppsz_argv[
 
         /* TODO: write an internal function of this one, to avoid
          *       unnecessary lookups. */
+        char *mrl = make_URI( ppsz_argv[i_opt] );
+        if( !mrl )
+            continue;
 
         playlist_t *p_playlist = pl_Hold( p_vlc );
-        playlist_AddExt( p_playlist, ppsz_argv[i_opt], NULL, PLAYLIST_INSERT,
-                         0, -1,
-                         i_options, ( i_options ? &ppsz_argv[i_opt + 1] : NULL ), VLC_INPUT_OPTION_TRUSTED,
-                         true, pl_Unlocked );
+        playlist_AddExt( p_playlist, mrl, NULL, PLAYLIST_INSERT,
+                0, -1, i_options, ( i_options ? &ppsz_argv[i_opt + 1] : NULL ),
+                VLC_INPUT_OPTION_TRUSTED, true, pl_Unlocked );
         pl_Release( p_vlc );
+        free( mrl );
     }
 
     return VLC_SUCCESS;

@@ -38,6 +38,7 @@
 #include <vlc_plugin.h>
 
 #include <vlc_aout.h>
+#include <vlc_filter.h>
 
 /*****************************************************************************
  * Local prototypes
@@ -45,10 +46,9 @@
 
 static int  Open     ( vlc_object_t * );
 static void Close    ( vlc_object_t * );
-static void DoWork   ( aout_instance_t * , aout_filter_t *,
-                       aout_buffer_t * , aout_buffer_t * );
+static block_t *DoWork( filter_t *, block_t * );
 
-struct aout_filter_sys_t
+struct filter_sys_t
 {
     /* TODO: Cleanup and optimise */
     int i_cumulative;
@@ -93,7 +93,7 @@ vlc_module_begin ()
         N_("Wet mix"), N_("Level of delayed signal"), true )
     add_float_with_range( "dry-mix", 0.4, -0.999, 0.999, NULL,
         N_("Dry Mix"), N_("Level of input signal"), true )
-    set_capability( "audio filter", 0 )
+    set_capability( "audio filter2", 0 )
     set_callbacks( Open, Close )
 vlc_module_end ()
 
@@ -113,31 +113,30 @@ static inline float small_value()
  */
 static int Open( vlc_object_t *p_this )
 {
-    aout_filter_t *p_filter = (aout_filter_t*)p_this;
-    aout_filter_sys_t *p_sys;
+    filter_t *p_filter = (filter_t*)p_this;
+    filter_sys_t *p_sys;
 
-    if ( !AOUT_FMTS_SIMILAR( &p_filter->input, &p_filter->output ) )
+    if ( !AOUT_FMTS_SIMILAR( &p_filter->fmt_in.audio, &p_filter->fmt_out.audio ) )
     {
         msg_Err( p_filter, "input and output formats are not similar" );
         return VLC_EGENERIC;
     }
 
-    if( p_filter->input.i_format != VLC_CODEC_FL32 ||
-        p_filter->output.i_format != VLC_CODEC_FL32 )
+    if( p_filter->fmt_in.audio.i_format != VLC_CODEC_FL32 ||
+        p_filter->fmt_out.audio.i_format != VLC_CODEC_FL32 )
     {
-        p_filter->input.i_format = VLC_CODEC_FL32;
-        p_filter->output.i_format = VLC_CODEC_FL32;
+        p_filter->fmt_in.audio.i_format = VLC_CODEC_FL32;
+        p_filter->fmt_out.audio.i_format = VLC_CODEC_FL32;
         msg_Warn( p_filter, "bad input or output format" );
     }
 
-    p_filter->pf_do_work = DoWork;
-    p_filter->b_in_place = true;
+    p_filter->pf_audio_filter = DoWork;
 
-    p_sys = p_filter->p_sys = malloc( sizeof( aout_filter_sys_t ) );
+    p_sys = p_filter->p_sys = malloc( sizeof( *p_sys ) );
     if( !p_sys )
         return VLC_ENOMEM;
 
-    p_sys->i_channels       = aout_FormatNbChannels( &p_filter->input );
+    p_sys->i_channels       = aout_FormatNbChannels( &p_filter->fmt_in.audio );
     p_sys->f_delayTime      = var_CreateGetFloat( p_this, "delay-time" );
     p_sys->f_sweepDepth     = var_CreateGetFloat( p_this, "sweep-depth" );
     p_sys->f_sweepRate      = var_CreateGetFloat( p_this, "sweep-rate" );
@@ -168,12 +167,12 @@ static int Open( vlc_object_t *p_this )
 
     /* Max delay = delay + depth. Min = delay - depth */
     p_sys->i_bufferLength = p_sys->i_channels * ( (int)( ( p_sys->f_delayTime
-                + p_sys->f_sweepDepth ) * p_filter->input.i_rate/1000 ) + 1 );
+                + p_sys->f_sweepDepth ) * p_filter->fmt_in.audio.i_rate/1000 ) + 1 );
 
     msg_Dbg( p_filter , "Buffer length:%d, Channels:%d, Sweep Depth:%f, Delay "
             "time:%f, Sweep Rate:%f, Sample Rate: %d", p_sys->i_bufferLength,
             p_sys->i_channels, p_sys->f_sweepDepth, p_sys->f_delayTime,
-            p_sys->f_sweepRate, p_filter->input.i_rate );
+            p_sys->f_sweepRate, p_filter->fmt_in.audio.i_rate );
     if( p_sys->i_bufferLength <= 0 )
     {
         msg_Err( p_filter, "Delay-time, Sampl rate or Channels was incorrect" );
@@ -199,14 +198,14 @@ static int Open( vlc_object_t *p_this )
     p_sys->pf_write = p_sys->pf_delayLineStart;
 
     if( p_sys->f_sweepDepth < small_value() ||
-            p_filter->input.i_rate < small_value() ) {
+            p_filter->fmt_in.audio.i_rate < small_value() ) {
         p_sys->f_sinMultiplier = 0.0;
     }
     else {
         p_sys->f_sinMultiplier = 11 * p_sys->f_sweepRate /
-            ( 7 * p_sys->f_sweepDepth * p_filter->input.i_rate ) ;
+            ( 7 * p_sys->f_sweepDepth * p_filter->fmt_in.audio.i_rate ) ;
     }
-    p_sys->i_sampleRate = p_filter->input.i_rate;
+    p_sys->i_sampleRate = p_filter->fmt_in.audio.i_rate;
 
     return VLC_SUCCESS;
 }
@@ -225,31 +224,24 @@ static inline void sanitize( float * f_value )
 
 /**
  * DoWork : delays and finds the value of the current frame
- * @param p_aout Audio output object
  * @param p_filter This filter object
  * @param p_in_buf Input buffer
- * @param p_out_buf Output buffer
+ * @return Output buffer
  */
-static void DoWork( aout_instance_t *p_aout, aout_filter_t *p_filter,
-                    aout_buffer_t *p_in_buf, aout_buffer_t *p_out_buf )
+static block_t *DoWork( filter_t *p_filter, block_t *p_in_buf )
 {
-    VLC_UNUSED( p_aout );
-
-    struct aout_filter_sys_t *p_sys = p_filter->p_sys;
+    struct filter_sys_t *p_sys = p_filter->p_sys;
     int i_chan;
-    int i_samples = p_in_buf->i_nb_samples; /* Gives the number of samples */
+    unsigned i_samples = p_in_buf->i_nb_samples; /* number of samples */
     /* maximum number of samples to offset in buffer */
     int i_maxOffset = floor( p_sys->f_sweepDepth * p_sys->i_sampleRate / 1000 );
-    float *p_out = (float*)p_out_buf->p_buffer;
+    float *p_out = (float*)p_in_buf->p_buffer;
     float *p_in =  (float*)p_in_buf->p_buffer;
 
     float *pf_ptr, f_diff = 0, f_frac = 0, f_temp = 0 ;
 
-    p_out_buf->i_nb_samples = p_in_buf->i_nb_samples;
-    p_out_buf->i_nb_bytes = p_in_buf->i_nb_bytes;
-
     /* Process each sample */
-    for( int i = 0; i < i_samples ; i++ )
+    for( unsigned i = 0; i < i_samples ; i++ )
     {
         /* Use a sine function as a oscillator wave. TODO */
         /* f_offset = sinf( ( p_sys->i_cumulative ) * p_sys->f_sinMultiplier ) *
@@ -316,7 +308,7 @@ static void DoWork( aout_instance_t *p_aout, aout_filter_t *p_filter,
         }
 
     }
-    return;
+    return p_in_buf;
 }
 
 /**
@@ -325,8 +317,8 @@ static void DoWork( aout_instance_t *p_aout, aout_filter_t *p_filter,
  */
 static void Close( vlc_object_t *p_this )
 {
-    aout_filter_t *p_filter = ( aout_filter_t* )p_this;
-    aout_filter_sys_t *p_sys = p_filter->p_sys;
+    filter_t *p_filter = ( filter_t* )p_this;
+    filter_sys_t *p_sys = p_filter->p_sys;
 
     free( p_sys->pf_delayLineStart );
     free( p_sys );

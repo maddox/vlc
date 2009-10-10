@@ -84,19 +84,40 @@ int CommonInit( vout_thread_t *p_vout )
     p_sys->i_changes = 0;
     SetRectEmpty( &p_sys->rect_display );
     SetRectEmpty( &p_sys->rect_parent );
-    vlc_mutex_init( &p_sys->lock );
 
     var_Create( p_vout, "video-title", VLC_VAR_STRING | VLC_VAR_DOINHERIT );
 
     /* Set main window's size */
-    p_sys->i_window_width  = p_vout->i_window_width;
-    p_sys->i_window_height = p_vout->i_window_height;
+    vout_window_cfg_t wnd_cfg;
 
-    p_sys->p_event = EventThreadCreate( p_vout );
+    memset( &wnd_cfg, 0, sizeof(wnd_cfg) );
+    wnd_cfg.type   = VOUT_WINDOW_TYPE_HWND;
+    wnd_cfg.x      = 0;
+    wnd_cfg.y      = 0;
+    wnd_cfg.width  = p_vout->i_window_width;
+    wnd_cfg.height = p_vout->i_window_height;
+
+    p_sys->p_event = EventThreadCreate( p_vout, &wnd_cfg );
     if( !p_sys->p_event )
         return VLC_EGENERIC;
-    if( EventThreadStart( p_sys->p_event ) )
+
+    event_cfg_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+#ifdef MODULE_NAME_IS_direct3d
+    cfg.use_desktop = p_vout->p_sys->b_desktop;
+#endif
+#ifdef MODULE_NAME_IS_directx
+    cfg.use_overlay = p_vout->p_sys->b_using_overlay;
+#endif
+    event_hwnd_t hwnd;
+    if( EventThreadStart( p_sys->p_event, &hwnd, &cfg ) )
         return VLC_EGENERIC;
+
+    p_sys->parent_window = hwnd.parent_window;
+    p_sys->hparent       = hwnd.hparent;
+    p_sys->hwnd          = hwnd.hwnd;
+    p_sys->hvideownd     = hwnd.hvideownd;
+    p_sys->hfswnd        = hwnd.hfswnd;
 
     /* Variable to indicate if the window should be on top of others */
     /* Trigger a callback right now */
@@ -123,8 +144,6 @@ void CommonClean( vout_thread_t *p_vout )
         EventThreadDestroy( p_sys->p_event );
     }
 
-    vlc_mutex_destroy( &p_sys->lock );
-
 #if !defined(UNDER_CE) && !defined(MODULE_NAME_IS_glwin32)
     RestoreScreensaver( p_vout );
 #endif
@@ -134,13 +153,10 @@ void CommonManage( vout_thread_t *p_vout )
 {
     /* If we do not control our window, we check for geometry changes
      * ourselves because the parent might not send us its events. */
-    vlc_mutex_lock( &p_vout->p_sys->lock );
     if( p_vout->p_sys->hparent && !p_vout->b_fullscreen )
     {
         RECT rect_parent;
         POINT point;
-
-        vlc_mutex_unlock( &p_vout->p_sys->lock );
 
         GetClientRect( p_vout->p_sys->hparent, &rect_parent );
         point.x = point.y = 0;
@@ -182,10 +198,9 @@ void CommonManage( vout_thread_t *p_vout )
 #endif
         }
     }
-    else
-    {
-        vlc_mutex_unlock( &p_vout->p_sys->lock );
-    }
+
+    /* */
+    p_vout->p_sys->i_changes |= EventThreadRetreiveChanges( p_vout->p_sys->p_event );
 
     /* autoscale toggle */
     if( p_vout->i_changes & VOUT_SCALE_CHANGE )
@@ -308,21 +323,14 @@ void UpdateRects( vout_thread_t *p_vout, bool b_force )
     ClientToScreen( p_vout->p_sys->hwnd, &point );
 
     /* If nothing changed, we can return */
-    if( !b_force
-         && p_vout->p_sys->i_window_width == rect.right
-         && p_vout->p_sys->i_window_height == rect.bottom
-         && p_vout->p_sys->i_window_x == point.x
-         && p_vout->p_sys->i_window_y == point.y )
-    {
+    bool b_changed;
+    EventThreadUpdateWindowPosition( p_vout->p_sys->p_event, &b_changed,
+                                     point.x, point.y,
+                                     rect.right, rect.bottom );
+    if( !b_force && !b_changed )
         return;
-    }
 
     /* Update the window position and size */
-    p_vout->p_sys->i_window_x = point.x;
-    p_vout->p_sys->i_window_y = point.y;
-    p_vout->p_sys->i_window_width = rect.right;
-    p_vout->p_sys->i_window_height = rect.bottom;
-
     vout_PlacePicture( p_vout, rect.right, rect.bottom,
                        &i_x, &i_y, &i_width, &i_height );
 
@@ -504,7 +512,7 @@ int Control( vout_thread_t *p_vout, int i_query, va_list args )
         rect_window.bottom = va_arg( args, unsigned int );
         if( !rect_window.right ) rect_window.right = p_vout->i_window_width;
         if( !rect_window.bottom ) rect_window.bottom = p_vout->i_window_height;
-        AdjustWindowRect( &rect_window, p_vout->p_sys->i_window_style, 0 );
+        AdjustWindowRect( &rect_window, EventThreadGetWindowStyle( p_vout->p_sys->p_event ), 0 );
 
         SetWindowPos( p_vout->p_sys->hwnd, 0, 0, 0,
                       rect_window.right - rect_window.left,
@@ -655,7 +663,7 @@ void Win32ToggleFullscreen( vout_thread_t *p_vout )
     {
         msg_Dbg( p_vout, "leaving fullscreen mode" );
         /* Change window style, no borders and no title bar */
-        SetWindowLong( hwnd, GWL_STYLE, p_vout->p_sys->i_window_style );
+        SetWindowLong( hwnd, GWL_STYLE, EventThreadGetWindowStyle( p_vout->p_sys->p_event ) );
 
         if( p_vout->p_sys->hparent )
         {
@@ -683,7 +691,7 @@ void Win32ToggleFullscreen( vout_thread_t *p_vout )
         }
 
         /* Make sure the mouse cursor is displayed */
-        PostMessage( p_vout->p_sys->hwnd, WM_VLC_SHOW_MOUSE, 0, 0 );
+        EventThreadMouseShow( p_vout->p_sys->p_event );
     }
 
     /* Update the object variable and trigger callback */

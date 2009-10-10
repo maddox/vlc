@@ -125,27 +125,7 @@ typedef int32_t vlc_fixed_t;
  * Main audio output structures
  *****************************************************************************/
 
-/** audio output buffer */
-struct aout_buffer_t
-{
-    uint8_t *               p_buffer;
-    /* i_size is the real size of the buffer (used for debug ONLY), i_nb_bytes
-     * is the number of significative bytes in it. */
-    size_t                  i_size, i_nb_bytes;
-    unsigned int            i_nb_samples;
-    bool                    b_alloc;
-    bool                    b_discontinuity; /* Set on discontinuity (for non pcm stream) */
-    mtime_t                 start_date, end_date;
-
-    struct aout_buffer_t *  p_next;
-    void                 *p_sys;
-};
-
-static inline void aout_BufferFree( aout_buffer_t *buffer )
-{
-    if( buffer && buffer->b_alloc )
-        free( buffer );
-}
+#define aout_BufferFree( buffer ) block_Release( buffer )
 
 /* Size of a frame for S/PDIF output. */
 #define AOUT_SPDIF_SIZE 6144
@@ -173,14 +153,7 @@ struct aout_fifo_t
 
 /* FIXME to remove once aout.h is cleaned a bit more */
 #include <vlc_aout_mixer.h>
-
-/* */
-typedef struct
-{
-    vout_thread_t  *(*pf_request_vout)( void *,
-                                        vout_thread_t *, video_format_t *, bool b_recycle );
-    void *p_private;
-} aout_request_vout_t;
+#include <vlc_block.h>
 
 /** audio output filter */
 typedef struct aout_filter_owner_sys_t aout_filter_owner_sys_t;
@@ -189,25 +162,18 @@ struct aout_filter_t
 {
     VLC_COMMON_MEMBERS
 
-    audio_sample_format_t   input;
-    audio_sample_format_t   output;
-    aout_alloc_t            output_alloc;
-
     module_t *              p_module;
     aout_filter_sys_t       *p_sys;
 
+    es_format_t             fmt_in;
+    es_format_t             fmt_out;
+
+    aout_alloc_t            output_alloc;
+
     bool                    b_in_place;
-    bool                    b_continuity;
 
     void                    (*pf_do_work)( aout_instance_t *, aout_filter_t *,
                                            aout_buffer_t *, aout_buffer_t * );
-
-    /* Owner fieldS
-     * XXX You MUST not use them directly */
-
-    /* Vout callback
-     * XXX use aout_filter_RequestVout */
-    aout_request_vout_t request_vout;
 
     /* Private structure for the owner of the filter */
     aout_filter_owner_sys_t *p_owner;
@@ -226,7 +192,7 @@ typedef struct aout_output_t
     bool              b_starving;
 
     /* post-filters */
-    aout_filter_t *         pp_filters[AOUT_MAX_FILTERS];
+    filter_t *              pp_filters[AOUT_MAX_FILTERS];
     int                     i_nb_filters;
 
     aout_fifo_t             fifo;
@@ -364,7 +330,7 @@ VLC_EXPORT( void, aout_EnableFilter, (vlc_object_t *, const char *, bool ));
         aout_EnableFilter( VLC_OBJECT(o), n, b )
 
 /* */
-VLC_EXPORT( vout_thread_t *, aout_filter_RequestVout, ( aout_filter_t *, vout_thread_t *p_vout, video_format_t *p_fmt ) );
+VLC_EXPORT( vout_thread_t *, aout_filter_RequestVout, ( filter_t *, vout_thread_t *p_vout, video_format_t *p_fmt ) );
 
 # ifdef __cplusplus
 }

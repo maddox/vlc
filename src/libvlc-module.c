@@ -63,12 +63,16 @@ static const char *const ppsz_language[] =
     "ka",
     "de",
     "he",
+    "hr",
     "hu",
     "id",
     "it",
     "ja",
     "ko",
+    "lt",
+    "mn",
     "ms",
+    "kk",
     "km",
     "oc",
     "fa",
@@ -86,6 +90,7 @@ static const char *const ppsz_language[] =
     "sv",
     "tr",
     "uk",
+    "vi",
 };
 
 static const char *const ppsz_language_text[] =
@@ -108,12 +113,16 @@ static const char *const ppsz_language_text[] =
     "ქართული",
     "Deutsch",
     "עברית",
+    "hrvatski",
     "Magyar",
     "Bahasa Indonesia",
     "Italiano",
     "日本語",
     "한국어",
+    "lietuvių",
+    "Монгол хэл",
     "Melayu",
+    "Қазақ тілі",
     "ភាសាខ្មែរ",
     "Occitan",
     "ﻑﺍﺮﺳی",
@@ -131,6 +140,7 @@ static const char *const ppsz_language_text[] =
     "Svenska",
     "Türkçe",
     "украї́нська мо́ва",
+    "tiếng Việt",
 };
 #endif
 
@@ -440,6 +450,28 @@ static const char *const ppsz_align_descriptions[] =
 #define MOUSE_HIDE_TIMEOUT_LONGTEXT N_( \
     "Hide mouse cursor and fullscreen controller after " \
     "n milliseconds, default is 3000 ms (3 sec.)")
+
+#define DEINTERLACE_TEXT N_("Deinterlace")
+#define DEINTERLACE_LONGTEXT N_(\
+    "Deinterlace")
+static const int pi_deinterlace[] = {
+    0, -1, 1
+};
+static const char * const  ppsz_deinterlace_text[] = {
+    "Off", "Automatic", "On"
+};
+
+#define DEINTERLACE_MODE_TEXT N_("Deinterlace mode")
+#define DEINTERLACE_MODE_LONGTEXT N_( \
+    "Deinterlace method to use for video processing.")
+static const char * const ppsz_deinterlace_mode[] = {
+    "discard", "blend", "mean", "bob",
+    "linear", "x", "yadif", "yadif2x"
+};
+static const char * const ppsz_deinterlace_mode_text[] = {
+    N_("Discard"), N_("Blend"), N_("Mean"), N_("Bob"),
+    N_("Linear"), "X", "Yadif", "Yadif (2x)"
+};
 
 static const int pi_pos_values[] = { 0, 1, 2, 4, 8, 5, 6, 9, 10 };
 static const char *const ppsz_pos_descriptions[] =
@@ -1008,6 +1040,12 @@ static const char *const ppsz_clock_descriptions[] =
 #define SSE2_LONGTEXT N_( \
     "If your processor supports the SSE2 instructions set, VLC can take " \
     "advantage of them.")
+
+#define SSE3_TEXT N_("Enable CPU SSE3 support")
+#define SSE3_LONGTEXT N_( \
+    "If your processor supports the SSE3 instructions set, VLC can take " \
+    "advantage of them.")
+
 
 #define ALTIVEC_TEXT N_("Enable CPU AltiVec support")
 #define ALTIVEC_LONGTEXT N_( \
@@ -1649,7 +1687,14 @@ vlc_module_begin ()
     add_integer( "align", 0, NULL, ALIGN_TEXT, ALIGN_LONGTEXT, true )
         change_integer_list( pi_align_values, ppsz_align_descriptions, NULL )
     add_float( "zoom", 1, NULL, ZOOM_TEXT, ZOOM_LONGTEXT, true )
-
+    add_integer( "deinterlace", 0, NULL,
+                 DEINTERLACE_TEXT, DEINTERLACE_LONGTEXT, false )
+        change_integer_list( pi_deinterlace, ppsz_deinterlace_text, 0 )
+        change_safe()
+    add_string( "deinterlace-mode", "blend", NULL,
+                DEINTERLACE_MODE_TEXT, DEINTERLACE_MODE_LONGTEXT, false )
+        change_string_list( ppsz_deinterlace_mode, ppsz_deinterlace_mode_text, 0 )
+        change_safe()
 
     set_subcategory( SUBCAT_VIDEO_VOUT )
     add_module( "vout", "video output", NULL, NULL, VOUT_TEXT, VOUT_LONGTEXT,
@@ -1926,6 +1971,8 @@ vlc_module_begin ()
     add_bool( "sse", 1, NULL, SSE_TEXT, SSE_LONGTEXT, true )
         change_need_restart ()
     add_bool( "sse2", 1, NULL, SSE2_TEXT, SSE2_LONGTEXT, true )
+        change_need_restart ()
+    add_bool( "sse3", 1, NULL, SSE3_TEXT, SSE3_LONGTEXT, true )
         change_need_restart ()
 #endif
 #if defined( __powerpc__ ) || defined( __ppc__ ) || defined( __ppc64__ )
@@ -2251,7 +2298,7 @@ vlc_module_begin ()
      */
 #   define KEY_TOGGLE_FULLSCREEN  'f'
 #   define KEY_LEAVE_FULLSCREEN   KEY_ESC
-#   define KEY_PLAY_PAUSE         KEY_SPACE
+#   define KEY_PLAY_PAUSE         ' '
 #   define KEY_PAUSE              KEY_UNSET
 #   define KEY_PLAY               KEY_UNSET
 #   define KEY_FASTER             '+'
@@ -2667,7 +2714,7 @@ vlc_module_begin ()
         change_short( 'p' )
         change_internal ()
         change_unsaveable ()
-    add_bool( "ignore-config", false, NULL, IGNORE_CONFIG_TEXT, "", false )
+    add_bool( "ignore-config", true, NULL, IGNORE_CONFIG_TEXT, "", false )
         change_internal ()
         change_unsaveable ()
     add_bool( "save-config", false, NULL, SAVE_CONFIG_TEXT, "",

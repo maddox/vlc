@@ -341,7 +341,7 @@ static void Refresh(vout_display_t *vd)
 
     if (width  != vd->cfg->display.width ||
         height != vd->cfg->display.height)
-        vout_display_SendEventDisplaySize(vd, width, height);
+        vout_display_SendEventDisplaySize(vd, width, height, false);
 }
 
 /**
@@ -436,8 +436,6 @@ static const struct {
     { CACA_KEY_PAGEUP,  KEY_PAGEUP },
     { CACA_KEY_PAGEDOWN,KEY_PAGEDOWN },
 
-    { ' ',              KEY_SPACE },
-
     /* */
     { -1, -1 }
 };
@@ -486,7 +484,7 @@ static void Manage(vout_display_t *vd)
         }
         case CACA_EVENT_RESIZE:
             vout_display_SendEventDisplaySize(vd, caca_get_event_resize_width(&ev),
-                                                  caca_get_event_resize_height(&ev));
+                                                  caca_get_event_resize_height(&ev), false);
             break;
         case CACA_EVENT_MOUSE_MOTION: {
             vout_display_place_t place;

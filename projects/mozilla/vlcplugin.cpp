@@ -127,7 +127,6 @@ NPError VlcPlugin::init(int argc, char* const argn[], char* const argv[])
     ppsz_argv[ppsz_argc++] = "-vv";
     ppsz_argv[ppsz_argc++] = "--no-stats";
     ppsz_argv[ppsz_argc++] = "--no-media-library";
-    ppsz_argv[ppsz_argc++] = "--ignore-config";
     ppsz_argv[ppsz_argc++] = "--intf=dummy";
     ppsz_argv[ppsz_argc++] = "--no-video-title-show";
 
@@ -329,14 +328,7 @@ int VlcPlugin::playlist_add_extended_untrusted( const char *mrl, const char *nam
         return -1;
 
     for( int i = 0; i < optc; ++i )
-    {
-        libvlc_media_add_option_flag(p_m, optv[i], libvlc_media_option_unique, ex);
-        if( libvlc_exception_raised(ex) )
-        {
-            libvlc_media_release(p_m);
-            return -1;
-        }
-    }
+        libvlc_media_add_option_flag(p_m, optv[i], libvlc_media_option_unique);
 
     libvlc_media_list_lock(libvlc_media_list);
     libvlc_media_list_add_media(libvlc_media_list,p_m,ex);
@@ -756,8 +748,7 @@ void VlcPlugin::redrawToolbar()
     libvlc_exception_init( &ex );
 
     /* get mute info */
-    b_mute = libvlc_audio_get_mute( getVLC(), &ex );
-    libvlc_exception_clear( &ex );
+    b_mute = libvlc_audio_get_mute( getVLC() );
 
     gcv.foreground = BlackPixel( p_display, 0 );
     gc = XCreateGC( p_display, control, GCForeground, &gcv );
@@ -865,8 +856,7 @@ vlc_toolbar_clicked_t VlcPlugin::getToolbarButtonClicked( int i_xpos, int i_ypos
     libvlc_exception_clear( &ex );
 
     /* get mute info */
-    b_mute = libvlc_audio_get_mute( getVLC(), &ex );
-    libvlc_exception_clear( &ex );
+    b_mute = libvlc_audio_get_mute( getVLC() );
 
     /* is Pause of Play button clicked */
     if( (is_playing != 1) &&

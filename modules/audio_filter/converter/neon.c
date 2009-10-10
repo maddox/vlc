@@ -25,35 +25,37 @@
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_aout.h>
+#include <vlc_filter.h>
+#include <vlc_cpu.h>
+
+#include <assert.h>
 
 static int Open (vlc_object_t *);
 
 vlc_module_begin ()
     set_description (N_("ARM NEON audio format conversions") )
-    set_capability ("audio filter", 20)
+    set_capability ("audio filter2", 20)
     set_callbacks (Open, NULL)
     add_requirement (NEON)
 vlc_module_end ()
 
-static void Do_F32_S32 (aout_instance_t *, aout_filter_t *,
-                        aout_buffer_t *, aout_buffer_t *);
-static void Do_S32_S16 (aout_instance_t *, aout_filter_t *,
-                        aout_buffer_t *, aout_buffer_t *);
+static block_t *Do_F32_S32 (filter_t *, block_t *);
+static block_t *Do_S32_S16 (filter_t *, block_t *);
 
 static int Open (vlc_object_t *obj)
 {
-    aout_filter_t *filter = (aout_filter_t *)obj;
+    filter_t *filter = (filter_t *)obj;
 
-    if (!AOUT_FMTS_SIMILAR (&filter->input, &filter->output))
+    if (!AOUT_FMTS_SIMILAR (&filter->fmt_in.audio, &filter->fmt_out.audio))
         return VLC_EGENERIC;
 
-    switch (filter->input.i_format)
+    switch (filter->fmt_in.audio.i_format)
     {
         case VLC_CODEC_FL32:
-            switch (filter->output.i_format)
+            switch (filter->fmt_out.audio.i_format)
             {
                 case VLC_CODEC_FI32:
-                    filter->pf_do_work = Do_F32_S32;
+                    filter->pf_audio_filter = Do_F32_S32;
                     break;
                 default:
                     return VLC_EGENERIC;
@@ -61,10 +63,10 @@ static int Open (vlc_object_t *obj)
             break;
 
         case VLC_CODEC_FI32:
-            switch (filter->output.i_format)
+            switch (filter->fmt_out.audio.i_format)
             {
                 case VLC_CODEC_S16N:
-                    filter->pf_do_work = Do_S32_S16;
+                    filter->pf_audio_filter = Do_S32_S16;
                     break;
                 default:
                     return VLC_EGENERIC;
@@ -73,128 +75,88 @@ static int Open (vlc_object_t *obj)
         default:
             return VLC_EGENERIC;
     }
-
-    filter->b_in_place = true;
-    return 0;
+    return VLC_SUCCESS;
 }
 
 /**
- * Half-precision floating point to signed fixed point conversion.
+ * Single-precision floating point to signed fixed point conversion.
  */
-static void Do_F32_S32 (aout_instance_t *aout, aout_filter_t *filter,
-                        aout_buffer_t *inbuf, aout_buffer_t *outbuf)
+static block_t *Do_F32_S32 (filter_t *filter, block_t *inbuf)
 {
     unsigned nb_samples = inbuf->i_nb_samples
-                     * aout_FormatNbChannels (&filter->input);
-    const float *inp = (float *)inbuf->p_buffer;
-    const float *endp = inp + nb_samples;
-    int32_t *outp = (int32_t *)outbuf->p_buffer;
+                     * aout_FormatNbChannels (&filter->fmt_in.audio);
+    int32_t *outp = (int32_t *)inbuf->p_buffer;
+    int32_t *endp = outp + nb_samples;
 
     if (nb_samples & 1)
     {
         asm volatile (
-            "vldr.32 s0, [%[inp]]\n"
+            "vldr.32 s0, [%[outp]]\n"
             "vcvt.s32.f32 d0, d0, #28\n"
             "vstr.32 s0, [%[outp]]\n"
             :
-            : [outp] "r" (outp), [inp] "r" (inp)
+            : [outp] "r" (outp)
             : "d0", "memory");
         outp++;
-        inp++;
     }
 
     if (nb_samples & 2)
         asm volatile (
-            "vld1.f32 {d0}, [%[inp]]!\n"
+            "vld1.f32 {d0}, [%[outp]]\n"
             "vcvt.s32.f32 d0, d0, #28\n"
             "vst1.s32 {d0}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
+            : [outp] "+r" (outp)
             :
             : "d0", "memory");
 
     if (nb_samples & 4)
         asm volatile (
-            "vld1.f32 {q0}, [%[inp]]!\n"
+            "vld1.f32 {q0}, [%[outp]]\n"
             "vcvt.s32.f32 q0, q0, #28\n"
             "vst1.s32 {q0}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
+            : [outp] "+r" (outp)
             :
             : "q0", "memory");
 
-    while (inp != endp)
+    while (outp != endp)
         asm volatile (
-            "vld1.f32 {q0-q1}, [%[inp]]!\n"
+            "vld1.f32 {q0-q1}, [%[outp]]\n"
             "vcvt.s32.f32 q0, q0, #28\n"
             "vcvt.s32.f32 q1, q1, #28\n"
             "vst1.s32 {q0-q1}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
+            : [outp] "+r" (outp)
             :
             : "q0", "q1", "memory");
 
-    outbuf->i_nb_samples = inbuf->i_nb_samples;
-    outbuf->i_nb_bytes = inbuf->i_nb_bytes;
-    (void) aout;
+    return inbuf;
 }
+
+void s32_s16_neon_unaligned (int16_t *out, const int32_t *in, unsigned nb);
+void s32_s16_neon (int16_t *out, const int32_t *in, unsigned nb);
 
 /**
  * Signed 32-bits fixed point to signed 16-bits integer
  */
-static void Do_S32_S16 (aout_instance_t *aout, aout_filter_t *filter,
-                        aout_buffer_t *inbuf, aout_buffer_t *outbuf)
+static block_t *Do_S32_S16 (filter_t *filter, block_t *inbuf)
 {
-    unsigned nb_samples = inbuf->i_nb_samples
-                     * aout_FormatNbChannels (&filter->input);
-    int32_t *inp = (int32_t *)inbuf->p_buffer;
-    const int32_t *endp = inp + nb_samples;
-    int16_t *outp = (int16_t *)outbuf->p_buffer;
+    const int32_t *in = (int32_t *)inbuf->p_buffer;
+    int16_t *out = (int16_t *)in;
+    unsigned nb;
 
-    while (nb_samples & 3)
-    {
-        const int16_t roundup = 1 << 12;
-        asm volatile (
-            "qadd r0, %[inv], %[roundup]\n"
-            "ssat %[outv], #16, r0, asr #13\n"
-            : [outv] "=r" (*outp)
-            : [inv] "r" (*inp), [roundup] "r" (roundup)
-            : "r0");
-        inp++;
-        outp++;
-        nb_samples--;
-    }
+    nb = ((-(uintptr_t)in) & 12) >> 2;
+    out += nb; /* fix up misalignment */
+    inbuf->p_buffer += 2 * nb;
 
-    if (nb_samples & 4)
-        asm volatile (
-            "vld1.s32 {q0}, [%[inp]]!\n"
-            "vrshrn.i32 d0, q0, #13\n"
-            "vst1.s16 {d0}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
-            :
-            : "q0", "memory");
+    s32_s16_neon_unaligned (out, in, nb);
+    in += nb;
+    out += nb;
 
-    if (nb_samples & 8)
-        asm volatile (
-            "vld1.s32 {q0-q1}, [%[inp]]!\n"
-            "vrshrn.i32 d0, q0, #13\n"
-            "vrshrn.i32 d1, q1, #13\n"
-            "vst1.s16 {q0}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
-            :
-            : "q0", "q1", "memory");
+    nb = inbuf->i_nb_samples
+         * aout_FormatNbChannels (&filter->fmt_in.audio) - nb;
+    assert (!(((uintptr_t)in) & 15));
+    assert (!(((uintptr_t)out) & 15));
 
-    while (inp != endp)
-        asm volatile (
-            "vld1.s32 {q0-q1}, [%[inp]]!\n"
-            "vld1.s32 {q2-q3}, [%[inp]]!\n"
-            "vrshrn.s32 d0, q0, #13\n"
-            "vrshrn.s32 d1, q1, #13\n"
-            "vrshrn.s32 d2, q2, #13\n"
-            "vrshrn.s32 d3, q3, #13\n"
-            "vst1.s16 {q0-q1}, [%[outp]]!\n"
-            : [outp] "+r" (outp), [inp] "+r" (inp)
-            :
-            : "q0", "q1", "q2", "q3", "memory");
-
-    outbuf->i_nb_samples = inbuf->i_nb_samples;
-    outbuf->i_nb_bytes = inbuf->i_nb_bytes / 2;
-    (void) aout;
+    s32_s16_neon (out, in, nb);
+    inbuf->i_buffer /= 2;
+    return inbuf;
 }

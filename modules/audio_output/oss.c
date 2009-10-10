@@ -39,10 +39,6 @@
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 
-#ifdef HAVE_ALLOCA_H
-#   include <alloca.h>
-#endif
-
 #include <vlc_aout.h>
 
 /* SNDCTL_DSP_RESET, SNDCTL_DSP_SETFMT, SNDCTL_DSP_STEREO, SNDCTL_DSP_SPEED,
@@ -660,10 +656,10 @@ static void* OSSThread( vlc_object_t *p_this )
         if ( p_buffer != NULL )
         {
             p_bytes = p_buffer->p_buffer;
-            i_size = p_buffer->i_nb_bytes;
+            i_size = p_buffer->i_buffer;
             /* This is theoretical ... we'll see next iteration whether
              * we're drifting */
-            next_date += p_buffer->end_date - p_buffer->start_date;
+            next_date += p_buffer->i_length;
         }
         else
         {

@@ -140,8 +140,7 @@ static int probe_luascript( vlc_object_t *p_this, const char * psz_filename,
     {
         msg_Warn( p_demux, "Error loading script %s: %s", psz_filename,
                   lua_tostring( L, lua_gettop( L ) ) );
-        lua_pop( L, 1 );
-        return VLC_EGENERIC;
+        goto error;
     }
 
     lua_getglobal( L, "probe" );
@@ -150,8 +149,7 @@ static int probe_luascript( vlc_object_t *p_this, const char * psz_filename,
     {
         msg_Warn( p_demux, "Error while runing script %s, "
                   "function probe() not found", psz_filename );
-        lua_pop( L, 1 );
-        return VLC_EGENERIC;
+        goto error;
     }
 
     if( lua_pcall( L, 0, 1, 0 ) )
@@ -159,23 +157,23 @@ static int probe_luascript( vlc_object_t *p_this, const char * psz_filename,
         msg_Warn( p_demux, "Error while runing script %s, "
                   "function probe(): %s", psz_filename,
                   lua_tostring( L, lua_gettop( L ) ) );
-        lua_pop( L, 1 );
-        return VLC_EGENERIC;
+        goto error;
     }
 
     if( lua_gettop( L ) )
     {
-        int i_ret = VLC_EGENERIC;
         if( lua_toboolean( L, 1 ) )
         {
             msg_Dbg( p_demux, "Lua playlist script %s's "
                      "probe() function was successful", psz_filename );
-            i_ret = VLC_SUCCESS;
+            lua_pop( L, 1 );
+            return VLC_SUCCESS;
         }
-        lua_pop( L, 1 );
-
-        return i_ret;
     }
+
+error:
+    lua_pop( L, 1 );
+    FREENULL( p_demux->p_sys->psz_filename );
     return VLC_EGENERIC;
 }
 

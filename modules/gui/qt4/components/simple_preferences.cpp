@@ -209,7 +209,8 @@ SPrefsPanel::SPrefsPanel( intf_thread_t *_p_intf, QWidget *_parent,
             ui.hwYUVBox->setVisible( false );
 #endif
 
-            CONFIG_GENERIC( "deinterlace-mode", StringList, ui.deinterLabel, deinterlaceBox );
+            CONFIG_GENERIC( "deinterlace", IntegerList, ui.deinterLabel, deinterlaceBox );
+            CONFIG_GENERIC( "deinterlace-mode", StringList, ui.deinterModeLabel, deinterlaceModeBox );
             CONFIG_GENERIC( "aspect-ratio", String, ui.arLabel, arLine );
 
             CONFIG_GENERIC_FILE( "snapshot-path", Directory, ui.dirLabel,
@@ -403,6 +404,8 @@ SPrefsPanel::SPrefsPanel( intf_thread_t *_p_intf, QWidget *_parent,
                 free( psz_dvddiscpath );
                 free( psz_vcddiscpath );
             }
+            CONFIG_GENERIC_FILE( "dvd", File, ui.DVDLabel,
+                                 ui.DVDDevice, ui.DVDBrowse );
             CONFIG_GENERIC_FILE( "input-record-path", Directory, ui.recordLabel,
                                  ui.recordPath, ui.recordBrowse );
 
@@ -412,11 +415,21 @@ SPrefsPanel::SPrefsPanel( intf_thread_t *_p_intf, QWidget *_parent,
             CONFIG_GENERIC_NO_BOOL( "ffmpeg-pp-q", Integer, ui.ppLabel,
                                     PostProcLevel );
             CONFIG_GENERIC( "avi-index", IntegerList, ui.aviLabel, AviRepair );
-            CONFIG_GENERIC( "rtsp-tcp", Bool, NULL, RTSP_TCPBox );
+
+            /* live555 module prefs */
+            CONFIG_GENERIC( "rtsp-tcp", Bool, NULL,
+                                live555TransportRTSP_TCPRadio );
+            if ( !module_exists( "live555" ) )
+            {
+                ui.live555TransportRTSP_TCPRadio->hide();
+                ui.live555TransportHTTPRadio->hide();
+                ui.live555TransportLabel->hide();
+            }
 #ifdef WIN32
             CONFIG_GENERIC( "prefer-system-codecs", Bool, NULL, systemCodecBox );
 #else
             ui.systemCodecBox->hide();
+            ui.systemCodecLabel->hide();
 #endif
             optionWidgets.append( ui.DVDDevice );
             optionWidgets.append( ui.cachingCombo );
@@ -534,6 +547,10 @@ SPrefsPanel::SPrefsPanel( intf_thread_t *_p_intf, QWidget *_parent,
                     addWidget( preview, 1, 0, 1, 2 );
             CONNECT( ui.displayModeBox, currentIndexChanged( int ),
                      preview, setPreview( int ) );
+            InterfacePreviewWidget *skinspreview = new InterfacePreviewWidget( this );
+            skinspreview->setPreview(3); /* skins_preview resource index */
+            ( (QGridLayout *) ui.LooknfeelBox->layout() )->
+                    addWidget( skinspreview, 7, 0, 1, 2 );
 
             CONFIG_GENERIC( "qt-display-mode", IntegerList, ui.displayLabel,
                             displayModeBox );
@@ -707,13 +724,14 @@ void SPrefsPanel::apply()
     case SPrefsInputAndCodecs:
     {
         /* Device default selection */
-        const char *psz_devicepath =
-              qtu( qobject_cast<QLineEdit *>(optionWidgets[inputLE] )->text() );
+        char *psz_devicepath =
+            strdup( qtu( qobject_cast<QLineEdit *>(optionWidgets[inputLE] )->text() ) );
         if( !EMPTY_STR( psz_devicepath ) )
         {
             config_PutPsz( p_intf, "dvd", psz_devicepath );
             config_PutPsz( p_intf, "vcd", psz_devicepath );
             config_PutPsz( p_intf, "cd-audio", psz_devicepath );
+            free( psz_devicepath );
         }
 
 #define CaCi( name, int ) config_PutInt( p_intf, name, int * i_comboValue )

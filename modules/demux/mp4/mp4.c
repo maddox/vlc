@@ -405,7 +405,12 @@ static int Open( vlc_object_t * p_this )
 
                     if( asprintf( &psz_absolute, "%s://%s%s",
                                   p_demux->psz_access, psz_path, psz_ref ) < 0 )
+                    {
+                        free( psz_ref );
+                        free( psz_path );
+                        vlc_object_release( p_input) ;
                         return VLC_ENOMEM;
+                    }
 
                     free( psz_ref );
                     psz_ref = psz_absolute;

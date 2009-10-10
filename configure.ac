@@ -367,7 +367,7 @@ case "${host_os}" in
     fi
     if test "${SYS}" = "mingwce"; then
         # add ws2 for closesocket, select, recv
-        VLC_ADD_LIBS([libvlccore access_http access_mms access_udp access_tcp access_ftp access_rtmp access_output_udp access_output_rtmp sap http netsync audioscrobbler growl rtp stream_out_rtp remoteosd ts],[-lws2])
+        VLC_ADD_LIBS([libvlccore access_http access_mms access_udp access_tcp access_ftp access_rtmp access_output_udp access_output_rtmp sap http netsync audioscrobbler growl rtp stream_out_rtp remoteosd ts telnet],[-lws2])
         VLC_ADD_LIBS([libvlccore],[-lmmtimer])
    fi
     ;;
@@ -572,7 +572,6 @@ need_libc=false
 
 dnl Check for usual libc functions
 AC_CHECK_FUNCS([gettimeofday isatty sigrelse getpwuid_r memalign posix_memalign if_nametoindex getenv putenv setenv ctime_r daemon fork lstat posix_fadvise posix_madvise uselocale])
-AC_FUNC_ALLOCA
 AC_CHECK_FUNCS(fcntl)
 AC_REPLACE_FUNCS([asprintf atof atoll getcwd getpid gmtime_r lldiv localtime_r rewind strcasecmp strcasestr strdup strlcpy strncasecmp strndup strnlen strsep strtof strtoll vasprintf swab])
 AC_CHECK_FUNCS([stricmp strnicmp])
@@ -1012,7 +1011,7 @@ if test "${ac_cv_c_ntohl_sys_param_h}" != "no"; then
 fi
 CFLAGS="${CFLAGS_save}"
 
-RDC_PROG_CC_WFLAGS([all extra sign-compare undef pointer-arith bad-function-cast cast-align write-strings missing-prototypes volatile-register-var error-implicit-function-declaration])
+RDC_PROG_CC_WFLAGS([all extra sign-compare undef pointer-arith bad-function-cast write-strings missing-prototypes volatile-register-var error-implicit-function-declaration])
 RDC_PROG_CC_FLAGS([-pipe])
 
 AC_ARG_ENABLE(warnings-as-error,
@@ -1265,10 +1264,8 @@ if test "${SYS}" != "mingwce"; then
   VLC_ADD_PLUGIN([equalizer])
   VLC_ADD_PLUGIN([param_eq])
   VLC_ADD_PLUGIN([scaletempo])
-  VLC_ADD_PLUGIN([converter_float])
   VLC_ADD_PLUGIN([a52tospdif])
   VLC_ADD_PLUGIN([dtstospdif])
-  VLC_ADD_PLUGIN([audio_format])
   ALIASES="${ALIASES} rvlc"
 fi
 
@@ -1282,10 +1279,8 @@ if test "${SYS}" = "mingwce"; then
   VLC_ADD_PLUGIN([simple_channel_mixer])
   VLC_ADD_PLUGIN([headphone_channel_mixer])
   VLC_ADD_PLUGIN([normvol])
-  VLC_ADD_PLUGIN([converter_float])
   VLC_ADD_PLUGIN([a52tospdif])
   VLC_ADD_PLUGIN([dtstospdif])
-  VLC_ADD_PLUGIN([audio_format])
   VLC_ADD_PLUGIN([i420_yuy2])
   VLC_ADD_PLUGIN([i422_yuy2])
   VLC_ADD_PLUGIN([i420_ymga])
@@ -1314,7 +1309,7 @@ else
 fi
 if test "${SYS}" = "darwin"; then
     VLC_ADD_PLUGIN([quartztext])
-    VLC_ADD_LDFLAGS([quartztext],[-Wl,-framework,Carbon,-framework,ApplicationServices])
+    VLC_ADD_LDFLAGS([quartztext],[-Wl,-framework,ApplicationServices])
 fi
 
 dnl
@@ -1394,7 +1389,7 @@ dnl  Check for fully workin SSE2 intrinsics
 dnl  We need support for -mmmx, we need <emmintrin.h>, and we also need a
 dnl  working compiler (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=23963)
 AC_ARG_ENABLE(sse,
-[  --disable-sse           disable SSE (1 and 2) optimizations (default auto)]
+[  --disable-sse           disable SSE (1, 2, 3 and 4) optimizations (default auto)]
 ,, [
   case "${host_cpu}" in
     i686|x86_64)
@@ -1453,6 +1448,42 @@ AS_IF([test "${enable_sse}" != "no"], [
     VLC_ADD_PLUGIN([i420_yuy2_sse2])
     VLC_ADD_PLUGIN([i422_yuy2_sse2])
   ])
+
+  # SSE3
+  AC_CACHE_CHECK([if $CC groks SSE3 inline assembly],
+    [ac_cv_sse3_inline],
+    [CFLAGS="${CFLAGS_save} -O -msse3"
+     AC_TRY_COMPILE(,[void *p;asm volatile("movsldup %%xmm1,%%xmm0"::"r"(p));],
+                    ac_cv_sse3_inline=yes, ac_cv_sse3_inline=no)
+     ARCH="${ARCH} sse3"
+  ])
+  AS_IF([test "${ac_cv_sse3_inline}" != "no"], [
+    AC_DEFINE(CAN_COMPILE_SSE3, 1,
+              [Define to 1 if SSE3 inline assembly is available.]) ])
+  # SSSE3
+  AC_CACHE_CHECK([if $CC groks SSSE3 inline assembly],
+    [ac_cv_ssse3_inline],
+    [CFLAGS="${CFLAGS_save} -O -mssse3"
+     AC_TRY_COMPILE(,[void *p;asm volatile("pabsw %%xmm0,%%xmm0"::"r"(p));],
+                    ac_cv_ssse3_inline=yes, ac_cv_ssse3_inline=no)
+     ARCH="${ARCH} ssse3"
+  ])
+
+  AS_IF([test "${ac_cv_ssse3_inline}" != "no"], [
+    AC_DEFINE(CAN_COMPILE_SSSE3, 1,
+              [Define to 1 if SSSE3 inline assembly is available.]) ])
+
+  # SSE4
+  AC_CACHE_CHECK([if $CC groks SSE4 inline assembly],
+    [ac_cv_sse4_inline],
+    [CFLAGS="${CFLAGS_save} -O -msse4"
+     AC_TRY_COMPILE(,[void *p;asm volatile("pmaxsb %%xmm1,%%xmm0"::"r"(p));],
+                    ac_cv_sse4_inline=yes, ac_cv_sse4_inline=no)
+     ARCH="${ARCH} sse4"
+  ])
+  AS_IF([test "${ac_cv_sse4_inline}" != "no"], [
+    AC_DEFINE(CAN_COMPILE_SSE4, 1,
+              [Define to 1 if SSE4 inline assembly is available.]) ])
 ])
 
 AC_CACHE_CHECK([if $CC groks 3D Now! inline assembly],
@@ -2263,7 +2294,16 @@ then
       then
         AC_MSG_ERROR([Could not find libdvbpsi on your system: you may get it from www.videolan.org, you'll need at least version 0.1.1])
       fi
-    ])
+    ],
+    [#if defined( HAVE_STDINT_H )
+#   include <stdint.h>
+#elif defined( HAVE_INTTYPES_H )
+#   include <inttypes.h>
+#endif
+#include <dvbpsi/dvbpsi.h>
+#include <dvbpsi/descriptor.h>
+#include <dvbpsi/pat.h>
+#include <dvbpsi/pmt.h>])
     CPPFLAGS="${CPPFLAGS_save}"
   ;;
   esac
@@ -2606,15 +2646,11 @@ dnl
 PKG_ENABLE_MODULES_VLC([OGG], [], [ogg >= 1.0], [Ogg demux support], [auto])
 if test "${enable_sout}" != "no"; then
     PKG_ENABLE_MODULES_VLC([MUX_OGG], [], [ogg >= 1.0], [Ogg demux support], [auto])
-else
-    AM_CONDITIONAL(HAVE_MUX_OGG, 0)
 fi
 
 if test "${enable_sout}" != "no"; then
 dnl Check for libshout
 PKG_ENABLE_MODULES_VLC([shout], [access_output_shout], [shout >= 2.1], [libshout output plugin], [auto])
-else
-    AM_CONDITIONAL(HAVE_shout, 0)
 fi
 
 dnl
@@ -2862,7 +2898,7 @@ AS_IF([test "${enable_id3tag}" = "yes"], [
 ])
 
 AC_ARG_ENABLE(merge-ffmpeg,
-[  --enable-merged-ffmpeg  merge FFMPEG-based plugins (default disabled)],, [
+[  --enable-merged-ffmpeg  merge FFmpeg-based plugins (default disabled)],, [
   enable_merge_ffmpeg="no"
 ])
 AM_CONDITIONAL([MERGE_FFMPEG], [test "$enable_merge_ffmpeg" != "no"])
@@ -3318,7 +3354,7 @@ if test "${enable_x264}" != "no"; then
       AC_MSG_ERROR([the specified tree doesn't have x264.h])
     fi
   else
-      PKG_CHECK_MODULES(X264,x264, [
+      PKG_CHECK_MODULES(X264,x264 >= 0.76, [
         VLC_ADD_PLUGIN([x264])
         VLC_ADD_LDFLAGS([x264],[${X264_LIBS}])
 
@@ -3338,7 +3374,7 @@ if test "${enable_x264}" != "no"; then
         fi
       ],[
         if test "${enable_x264}" = "yes"; then
-            AC_MSG_ERROR([Could not find libx264 on your system: you may get it from http://www.videolan.org/x264.html])
+            AC_MSG_ERROR([Could not find libx264 >= 0.76 on your system: you may get it from http://www.videolan.org/x264.html])
           fi
       ])
     LDFLAGS="${LDFLAGS_save}"
@@ -3548,9 +3584,13 @@ AC_ARG_ENABLE(xvmc,
 ])
 AS_IF([test "${enable_xvmc}" != "no"], [
   AC_CHECK_HEADERS(X11/extensions/vldXvMC.h, [
-    VLC_ADD_PLUGIN([xvmc])
-    VLC_ADD_LIBS([xvmc],[${X_LIBS} ${X_PRE_LIBS} -lX11 -lXext -lXvMCW -lXv ${LIBMPEG2_LIBS}])
-    VLC_ADD_CPPFLAGS([xvmc],[${X_CFLAGS} ${LIBMPEG2_CFLAGS}])
+    AS_IF([test "${enable_libmpeg2}" = "yes"], [
+      VLC_ADD_PLUGIN([xvmc])
+      VLC_ADD_LIBS([xvmc],[${X_LIBS} ${X_PRE_LIBS} -lX11 -lXext -lXvMCW -lXv ${LIBMPEG2_LIBS}])
+      VLC_ADD_CPPFLAGS([xvmc],[${X_CFLAGS} ${LIBMPEG2_CFLAGS}])
+    ], [
+      AC_MSG_ERROR([XVideo-MotionCompensation needs libmpeg2 which isn't available])
+    ])
   ], [
     AC_MSG_ERROR([XVideo-MotionCompensation extension not found!])
   ])
@@ -3604,7 +3644,11 @@ AS_IF([test "${enable_xcb}" != "no"], [
   ], [true])
 
   dnl xcb-utils
-  PKG_CHECK_MODULES(XCB_KEYSYMS, [xcb-keysyms])
+  PKG_CHECK_MODULES(XCB_KEYSYMS, [xcb-keysyms >= 0.3.4],
+    [true],
+    [PKG_CHECK_MODULES(XCB_KEYSYMS, [xcb-keysyms])
+    VLC_ADD_CFLAGS([globalhotkeys], [-DXCB_KEYSYM_OLD_API])]
+  )
 
   VLC_ADD_PLUGIN([xcb_window])
   VLC_ADD_PLUGIN([globalhotkeys])
@@ -4548,16 +4592,27 @@ dnl
 dnl libgcrypt
 dnl
 AC_ARG_ENABLE(libgcrypt,
-  [  --disable-libgcrypt      libgcrypts support (default enabled)])
+  [  --disable-libgcrypt      gcrypt support (default enabled)])
 AS_IF([test "${enable_libgcrypt}" != "no"], [
-  AM_PATH_LIBGCRYPT([1:1.1.94], [have_libgcrypt="yes"], [have_libgcrypt="no"])
+  AC_CHECK_DECL([GCRYCTL_SET_THREAD_CBS], [
+    have_libgcrypt="yes"
+    GCRYPT_CFLAGS=""
+    GCRYPT_LIBS="-lgcrypt"
+  ], [
+    AS_IF([test "${enable_libgcrypt}"], [
+      AC_MSG_ERROR([libgcrypt version 1.1.94 or higher not found.])
+    ])
+    have_libgcrypt="no"
+  ], [#include <gcrypt.h>])
 ])
 if test "${SYS}" = "mingw32" -o "${SYS}" = "mingwce"; then
   AS_IF([test "${have_libgcrypt}" = "yes"],[
-    VLC_ADD_LIBS([rtp stream_out_rtp], [${LIBGCRYPT_LIBS}])
+    VLC_ADD_LIBS([rtp stream_out_rtp], [${GCRYPT_LIBS}])
   ])
 fi
-AM_CONDITIONAL([HAVE_LIBGCRYPT], [test "${have_libgcrypt}" = "yes"])
+AC_SUBST(GCRYPT_CFLAGS)
+AC_SUBST(GCRYPT_LIBS)
+AM_CONDITIONAL([HAVE_GCRYPT], [test "${have_libgcrypt}" = "yes"])
 
 dnl
 dnl TLS/SSL
@@ -4576,8 +4631,8 @@ AS_IF([test "${enable_gnutls}" != "no"], [
     ])
     dnl The GnuTLS plugin invokes gcry_control directly.
     AS_IF([test "${have_libgcrypt}" = "yes"],[
-      VLC_ADD_LIBS([gnutls], [${LIBGCRYPT_LIBS}])
-      VLC_ADD_CFLAGS([gnutls], [${LIBGCRYPT_CFLAGS}])
+      VLC_ADD_LIBS([gnutls], [${GCRYPT_LIBS}])
+      VLC_ADD_CFLAGS([gnutls], [${GCRYPT_CFLAGS}])
     ])
     VLC_ADD_LIBS([gnutls], [$GNUTLS_LIBS])
   ], [
@@ -4597,8 +4652,8 @@ AC_ARG_ENABLE(remoteosd,
 AS_IF([test "${enable_remoteosd}" != "no"], [
   AS_IF([test "${have_libgcrypt}" = "yes"],[
     VLC_ADD_PLUGIN([remoteosd])
-    VLC_ADD_LIBS([remoteosd], ${LIBGCRYPT_LIBS})
-    VLC_ADD_CFLAGS([remoteosd], ${LIBGCRYPT_CFLAGS})
+    VLC_ADD_LIBS([remoteosd], ${GCRYPT_LIBS})
+    VLC_ADD_CFLAGS([remoteosd], ${GCRYPT_CFLAGS})
   ], [
     AC_MSG_ERROR([libgcrypt support required for RemoteOSD plugin])
   ])
@@ -4612,8 +4667,8 @@ AC_MSG_CHECKING([whether to enable RAOP plugin])
 AS_IF([test "${have_libgcrypt}" = "yes"], [
   AC_MSG_RESULT(yes)
   VLC_ADD_PLUGIN([stream_out_raop])
-  VLC_ADD_LIBS([stream_out_raop], [${LIBGCRYPT_LIBS} -lgpg-error])
-  VLC_ADD_CFLAGS([stream_out_raop], [${LIBGCRYPT_CFLAGS}])
+  VLC_ADD_LIBS([stream_out_raop], [${GCRYPT_LIBS} -lgpg-error])
+  VLC_ADD_CFLAGS([stream_out_raop], [${GCRYPT_CFLAGS}])
 ], [
   AC_MSG_RESULT(no)
   AC_MSG_WARN([libgcrypt support required for RAOP plugin])
@@ -4631,8 +4686,8 @@ then
   then
     AC_MSG_ERROR([libgcrypt is required for update checking system])
   fi
-  VLC_ADD_LIBS([libvlccore], [${LIBGCRYPT_LIBS}])
-  VLC_ADD_CFLAGS([libvlccore], [${LIBGCRYPT_CFLAGS}])
+  VLC_ADD_LIBS([libvlccore], [${GCRYPT_LIBS}])
+  VLC_ADD_CFLAGS([libvlccore], [${GCRYPT_CFLAGS}])
   AC_DEFINE([UPDATE_CHECK], 1, [Define if you want to use the VLC update mechanism])
 fi
 
@@ -4901,8 +4956,8 @@ AM_CONDITIONAL(BUILD_MOZILLA,${mozilla})
 dnl Tests for Osso and Xsp
 AC_CHECK_LIB(osso, osso_display_blanking_pause, [
   PKG_CHECK_MODULES(GLIB2, glib-2.0, [
-    VLC_ADD_CPPFLAGS([xvmc glx omapfb],[-DHAVE_OSSO ${DBUS_CFLAGS} ${GLIB2_CFLAGS}])
-    VLC_ADD_LIBS([xvmc glx omapfb],[-losso])
+    VLC_ADD_CPPFLAGS([xvmc glx],[-DHAVE_OSSO ${DBUS_CFLAGS} ${GLIB2_CFLAGS}])
+    VLC_ADD_LIBS([xvmc glx],[-losso])
  ])
 ])
 AC_CHECK_LIB(Xsp, XSPSetPixelDoubling,[

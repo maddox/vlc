@@ -59,10 +59,14 @@
 /* Format string sanity checks */
 #ifdef __GNUC__
 #   define LIBVLC_FORMAT(x,y) __attribute__ ((format(printf,x,y)))
+#   define LIBVLC_FORMAT_ARG(x) __attribute__ ((format_arg(x)))
 #   define LIBVLC_USED __attribute__ ((warn_unused_result))
+#   define LIBVLC_MALLOC __attribute__ ((malloc))
 #else
 #   define LIBVLC_FORMAT(x,y)
+#   define LIBVLC_FORMAT_ARG(x)
 #   define LIBVLC_USED
+#   define LIBVLC_MALLOC
 #endif
 
 /*****************************************************************************
@@ -206,7 +210,7 @@ typedef struct aout_instance_t aout_instance_t;
 typedef struct aout_sys_t aout_sys_t;
 typedef struct aout_fifo_t aout_fifo_t;
 typedef struct aout_input_t aout_input_t;
-typedef struct aout_buffer_t aout_buffer_t;
+typedef struct block_t aout_buffer_t;
 typedef audio_format_t audio_sample_format_t;
 typedef struct audio_date_t audio_date_t;
 typedef struct aout_filter_t aout_filter_t;
@@ -520,7 +524,7 @@ typedef int ( * vlc_callback_t ) ( vlc_object_t *,      /* variable's object */
 /* VLC_OBJECT: attempt at doing a clever cast */
 #ifdef __GNUC__
 # define VLC_OBJECT( x ) \
-    (((vlc_object_t *)(x))+0*(((typeof(x))0)->be_sure_to_add_VLC_COMMON_MEMBERS_to_struct))
+    (((vlc_object_t *)(x))+0*(((__typeof__(x))0)->be_sure_to_add_VLC_COMMON_MEMBERS_to_struct))
 #else
 # define VLC_OBJECT( x ) ((vlc_object_t *)(x))
 #endif
@@ -785,32 +789,16 @@ VLC_EXPORT( int, __vlc_execve, ( vlc_object_t *p_object, int i_argc, char *const
 /* dir wrappers (defined in src/extras/libc.c) */
 VLC_EXPORT(int, vlc_wclosedir, ( void *_p_dir ));
 
-/*****************************************************************************
- * CPU capabilities
- *****************************************************************************/
-#define CPU_CAPABILITY_NONE    0
-#define CPU_CAPABILITY_MMX     (1<<3)
-#define CPU_CAPABILITY_3DNOW   (1<<4)
-#define CPU_CAPABILITY_MMXEXT  (1<<5)
-#define CPU_CAPABILITY_SSE     (1<<6)
-#define CPU_CAPABILITY_SSE2    (1<<7)
-#define CPU_CAPABILITY_ALTIVEC (1<<16)
-#define CPU_CAPABILITY_NEON    (1<<24)
-#define CPU_CAPABILITY_FPU     (1<<31)
-VLC_EXPORT( unsigned, vlc_CPU, ( void ) );
-
-typedef void *(*vlc_memcpy_t) (void *tgt, const void *src, size_t n);
-typedef void *(*vlc_memset_t) (void *tgt, int c, size_t n);
-
-VLC_EXPORT( void, vlc_fastmem_register, (vlc_memcpy_t cpy, vlc_memset_t set) );
+/* Fast large memory copy and memory set */
 VLC_EXPORT( void *, vlc_memcpy, ( void *, const void *, size_t ) );
 VLC_EXPORT( void *, vlc_memset, ( void *, int, size_t ) );
 
 /*****************************************************************************
  * I18n stuff
  *****************************************************************************/
-VLC_EXPORT( char *, vlc_gettext, ( const char *msgid ) LIBVLC_USED );
+VLC_EXPORT( char *, vlc_gettext, ( const char *msgid ) LIBVLC_FORMAT_ARG(1) );
 
+LIBVLC_FORMAT_ARG(2)
 static inline const char *vlc_pgettext( const char *ctx, const char *id )
 {
     const char *tr = vlc_gettext( id );

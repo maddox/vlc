@@ -138,7 +138,7 @@ enum {
 
     /* Ask the module to acknowledge/refuse the display size change requested
      * (externally or by VOUT_DISPLAY_EVENT_DISPLAY_SIZE) */
-    VOUT_DISPLAY_CHANGE_DISPLAY_SIZE,   /* const vout_display_cfg_t *p_cfg */
+    VOUT_DISPLAY_CHANGE_DISPLAY_SIZE,   /* const vout_display_cfg_t *p_cfg, int is_forced */
 
     /* Ask the module to acknowledge/refuse fill display state change after
      * being requested externally */
@@ -174,7 +174,7 @@ enum {
 
     VOUT_DISPLAY_EVENT_FULLSCREEN,
 
-    VOUT_DISPLAY_EVENT_DISPLAY_SIZE,        /* The display size need to change : int i_width, int i_height */
+    VOUT_DISPLAY_EVENT_DISPLAY_SIZE,        /* The display size need to change : int i_width, int i_height, bool is_fullscreen */
 
     /* */
     VOUT_DISPLAY_EVENT_CLOSE,
@@ -207,8 +207,10 @@ struct vout_display_owner_t {
      * be overwritten nor used directly (use the vout_display_SendEvent*
      * wrapper.
      *
-     * You can send it at any time i.e. from any vout_display_t functions
-     * (TODO add support from a private thread).
+     * You can send it at any time i.e. from any vout_display_t functions or
+     * from another thread.
+     * Becarefull, it does not ensure correct serialization if it is used
+     * from multiple threads.
      */
     void            (*event)(vout_display_t *, int, va_list);
 
@@ -291,7 +293,7 @@ struct vout_display_t {
     /* Control on the module (mandatory) */
     int        (*control)(vout_display_t *, int, va_list);
 
-    /* Manage pending event (mandatory for now) */
+    /* Manage pending event (optional) */
     void       (*manage)(vout_display_t *);
 
     /* Private place holder for the vout_display_t module (optional)
@@ -315,9 +317,9 @@ static inline void vout_display_SendEvent(vout_display_t *vd, int query, ...)
     va_end(args);
 }
 
-static inline void vout_display_SendEventDisplaySize(vout_display_t *vd, int width, int height)
+static inline void vout_display_SendEventDisplaySize(vout_display_t *vd, int width, int height, bool is_fullscreen)
 {
-    vout_display_SendEvent(vd, VOUT_DISPLAY_EVENT_DISPLAY_SIZE, width, height);
+    vout_display_SendEvent(vd, VOUT_DISPLAY_EVENT_DISPLAY_SIZE, width, height, is_fullscreen);
 }
 static inline void vout_display_SendEventPicturesInvalid(vout_display_t *vd)
 {

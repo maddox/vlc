@@ -25,24 +25,7 @@
 /*****************************************************************************
  * event_thread_t: event thread
  *****************************************************************************/
-typedef struct
-{
-    vout_thread_t *p_vout;
-
-    /* */
-    vlc_thread_t thread;
-    vlc_mutex_t  lock;
-    vlc_cond_t   wait;
-    bool         b_ready;
-    bool         b_done;
-    bool         b_error;
-
-    /* Mouse */
-    volatile bool    b_cursor_hidden;
-    volatile mtime_t i_lastmoved;
-    mtime_t          i_mouse_hide_timeout;
-
-} event_thread_t;
+#include "events.h"
 
 #ifdef MODULE_NAME_IS_wingapi
     typedef struct GXDisplayProperties {
@@ -93,7 +76,6 @@ struct vout_sys_t
     struct vout_window_t *parent_window;         /* Parent window VLC object */
     HWND                 hparent;             /* Handle of the parent window */
     HWND                 hfswnd;          /* Handle of the fullscreen window */
-    WNDPROC              pf_wndproc;             /* Window handling callback */
 
     /* Multi-monitor support */
     HMONITOR             hmonitor;          /* handle of the current monitor */
@@ -107,13 +89,6 @@ struct vout_sys_t
 
     /* size of the overall window (including black bands) */
     RECT         rect_parent;
-
-    /* Window position and size */
-    int          i_window_x;
-    int          i_window_y;
-    int          i_window_width;
-    int          i_window_height;
-    int          i_window_style;
 
     volatile uint16_t i_changes;        /* changes made to the video display */
 
@@ -165,6 +140,7 @@ struct vout_sys_t
     LPDIRECTDRAWSURFACE2 p_current_surface;   /* surface currently displayed */
     LPDIRECTDRAWCLIPPER  p_clipper;             /* clipper used for blitting */
     HINSTANCE            hddraw_dll;       /* handle of the opened ddraw dll */
+    vlc_mutex_t    lock;
 #endif
 
 #ifdef MODULE_NAME_IS_glwin32
@@ -219,9 +195,6 @@ struct vout_sys_t
     RGBQUAD    green;
     RGBQUAD    blue;
 
-    bool b_focus;
-    bool b_parent_focus;
-
     HINSTANCE  gapi_dll;                   /* handle of the opened gapi dll */
 
     /* GAPI functions */
@@ -234,13 +207,7 @@ struct vout_sys_t
     int (*GXResume)();
 #endif
 
-#ifndef UNDER_CE
-    /* suspend display */
-    bool   b_suspend_display;
-#endif
-
     event_thread_t *p_event;
-    vlc_mutex_t    lock;
 };
 
 #ifdef MODULE_NAME_IS_wingapi
@@ -257,16 +224,6 @@ struct vout_sys_t
  * Prototypes from directx.c
  *****************************************************************************/
 int DirectDrawUpdateOverlay( vout_thread_t *p_vout );
-
-/*****************************************************************************
- * Prototypes from events.c
- *****************************************************************************/
-event_thread_t *EventThreadCreate( vout_thread_t * );
-void            EventThreadDestroy( event_thread_t * );
-int             EventThreadStart( event_thread_t * );
-void            EventThreadStop( event_thread_t * );
-
-void            EventThreadMouseAutoHide( event_thread_t * );
 
 /*****************************************************************************
  * Prototypes from common.c
@@ -288,9 +245,6 @@ void RestoreScreensaver ( vout_thread_t *p_vout );
 /*****************************************************************************
  * Constants
  *****************************************************************************/
-#define WM_VLC_HIDE_MOUSE WM_APP
-#define WM_VLC_SHOW_MOUSE WM_APP + 1
-#define WM_VLC_CHANGE_TEXT WM_APP + 2
 #define IDM_TOGGLE_ON_TOP WM_USER + 1
 #define DX_POSITION_CHANGE 0x1000
 #define DX_WALLPAPER_CHANGE 0x2000

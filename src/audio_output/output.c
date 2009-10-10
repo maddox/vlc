@@ -30,6 +30,8 @@
 
 #include <vlc_common.h>
 #include <vlc_aout.h>
+#include <vlc_cpu.h>
+
 #include "aout_internal.h"
 
 /*****************************************************************************
@@ -244,13 +246,14 @@ void aout_OutputDelete( aout_instance_t * p_aout )
  *****************************************************************************/
 void aout_OutputPlay( aout_instance_t * p_aout, aout_buffer_t * p_buffer )
 {
-    aout_FiltersPlay( p_aout, p_aout->output.pp_filters,
-                      p_aout->output.i_nb_filters,
+    aout_FiltersPlay( p_aout->output.pp_filters, p_aout->output.i_nb_filters,
                       &p_buffer );
 
-    if( p_buffer->i_nb_bytes == 0 )
+    if( !p_buffer )
+        return;
+    if( p_buffer->i_buffer == 0 )
     {
-        aout_BufferFree( p_buffer );
+        block_Release( p_buffer );
         return;
     }
 
@@ -281,12 +284,12 @@ aout_buffer_t * aout_OutputNextBuffer( aout_instance_t * p_aout,
     /* Drop the audio sample if the audio output is really late.
      * In the case of b_can_sleek, we don't use a resampler so we need to be
      * a lot more severe. */
-    while ( p_buffer && p_buffer->start_date <
+    while ( p_buffer && p_buffer->i_pts <
             (b_can_sleek ? start_date : mdate()) - AOUT_PTS_TOLERANCE )
     {
         msg_Dbg( p_aout, "audio output is too slow (%"PRId64"), "
-                 "trashing %"PRId64"us", mdate() - p_buffer->start_date,
-                 p_buffer->end_date - p_buffer->start_date );
+                 "trashing %"PRId64"us", mdate() - p_buffer->i_pts,
+                 p_buffer->i_length );
         p_buffer = p_buffer->p_next;
         aout_BufferFree( p_aout->output.fifo.p_first );
         p_aout->output.fifo.p_first = p_buffer;
@@ -315,8 +318,7 @@ aout_buffer_t * aout_OutputNextBuffer( aout_instance_t * p_aout,
     /* Here we suppose that all buffers have the same duration - this is
      * generally true, and anyway if it's wrong it won't be a disaster.
      */
-    if ( p_buffer->start_date > start_date
-                         + (p_buffer->end_date - p_buffer->start_date) )
+    if ( p_buffer->i_pts > start_date + p_buffer->i_length )
     /*
      *                   + AOUT_PTS_TOLERANCE )
      * There is no reason to want that, it just worsen the scheduling of
@@ -324,7 +326,7 @@ aout_buffer_t * aout_OutputNextBuffer( aout_instance_t * p_aout,
      * --Gibalou
      */
     {
-        const mtime_t i_delta = p_buffer->start_date - start_date;
+        const mtime_t i_delta = p_buffer->i_pts - start_date;
         aout_unlock_output_fifo( p_aout );
 
         if ( !p_aout->output.b_starving )
@@ -337,12 +339,12 @@ aout_buffer_t * aout_OutputNextBuffer( aout_instance_t * p_aout,
     p_aout->output.b_starving = 0;
 
     if ( !b_can_sleek &&
-          ( (p_buffer->start_date - start_date > AOUT_PTS_TOLERANCE)
-             || (start_date - p_buffer->start_date > AOUT_PTS_TOLERANCE) ) )
+          ( (p_buffer->i_pts - start_date > AOUT_PTS_TOLERANCE)
+             || (start_date - p_buffer->i_pts > AOUT_PTS_TOLERANCE) ) )
     {
         /* Try to compensate the drift by doing some resampling. */
         int i;
-        mtime_t difference = start_date - p_buffer->start_date;
+        mtime_t difference = start_date - p_buffer->i_pts;
         msg_Warn( p_aout, "output date isn't PTS date, requesting "
                   "resampling (%"PRId64")", difference );
 

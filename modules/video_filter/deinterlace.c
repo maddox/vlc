@@ -30,6 +30,7 @@
 #endif
 
 #include <errno.h>
+#include <assert.h>
 
 #ifdef HAVE_ALTIVEC_H
 #   include <altivec.h>
@@ -40,6 +41,7 @@
 #include <vlc_vout.h>
 #include <vlc_sout.h>
 #include <vlc_filter.h>
+#include <vlc_cpu.h>
 
 #ifdef CAN_COMPILE_MMXEXT
 #   include "mmx.h"
@@ -53,6 +55,8 @@
 #define DEINTERLACE_BOB     4
 #define DEINTERLACE_LINEAR  5
 #define DEINTERLACE_X       6
+#define DEINTERLACE_YADIF   7
+#define DEINTERLACE_YADIF2X 8
 
 /*****************************************************************************
  * Local protypes
@@ -73,6 +77,7 @@ static void RenderMean   ( vout_thread_t *, picture_t *, picture_t * );
 static void RenderBlend  ( vout_thread_t *, picture_t *, picture_t * );
 static void RenderLinear ( vout_thread_t *, picture_t *, picture_t *, int );
 static void RenderX      ( picture_t *, picture_t * );
+static void RenderYadif  ( vout_thread_t *, picture_t *, picture_t *, int, int );
 
 static void MergeGeneric ( void *, const void *, const void *, size_t );
 #if defined(CAN_COMPILE_C_ALTIVEC)
@@ -121,9 +126,9 @@ static int FilterCallback( vlc_object_t *, char const *,
 #define FILTER_CFG_PREFIX "sout-deinterlace-"
 
 static const char *const mode_list[] = {
-    "discard", "blend", "mean", "bob", "linear", "x" };
+    "discard", "blend", "mean", "bob", "linear", "x", "yadif", "yadif2x" };
 static const char *const mode_list_text[] = {
-    N_("Discard"), N_("Blend"), N_("Mean"), N_("Bob"), N_("Linear"), "X" };
+    N_("Discard"), N_("Blend"), N_("Mean"), N_("Bob"), N_("Linear"), "X", "Yadif", "Yadif (2x)" };
 
 vlc_module_begin ()
     set_description( N_("Deinterlacing video filter") )
@@ -133,7 +138,7 @@ vlc_module_begin ()
     set_subcategory( SUBCAT_VIDEO_VFILTER )
 
     set_section( N_("Display"),NULL)
-    add_string( "deinterlace-mode", "discard", NULL, MODE_TEXT,
+    add_string( "filter-deinterlace-mode", "discard", NULL, MODE_TEXT,
                 MODE_LONGTEXT, false )
         change_string_list( mode_list, mode_list_text, 0 )
         change_safe ()
@@ -161,6 +166,7 @@ static const char *const ppsz_filter_options[] = {
  * This structure is part of the video output thread descriptor.
  * It describes the Deinterlace specific properties of an output thread.
  *****************************************************************************/
+#define HISTORY_SIZE (3)
 struct vout_sys_t
 {
     int        i_mode;        /* Deinterlace mode */
@@ -176,6 +182,9 @@ struct vout_sys_t
 
     void (*pf_merge) ( void *, const void *, const void *, size_t );
     void (*pf_end_merge) ( void );
+
+    /* Yadif */
+    picture_t *pp_history[HISTORY_SIZE];
 };
 
 /*****************************************************************************
@@ -262,11 +271,11 @@ static int Create( vlc_object_t *p_this )
     }
 
     /* Look what method was requested */
-    psz_mode = var_CreateGetString( p_vout, "deinterlace-mode" );
+    psz_mode = var_CreateGetString( p_vout, "filter-deinterlace-mode" );
 
     if( !psz_mode )
     {
-        msg_Err( p_vout, "configuration variable deinterlace-mode empty" );
+        msg_Err( p_vout, "configuration variable filter-deinterlace-mode empty" );
         msg_Err( p_vout, "no deinterlace mode provided, using \"discard\"" );
 
         psz_mode = strdup( "discard" );
@@ -318,9 +327,22 @@ static void SetFilterMethod( vout_thread_t *p_vout, const char *psz_method )
         p_sys->b_double_rate = false;
         p_sys->b_half_height = false;
     }
+    else if( !strcmp( psz_method, "yadif" ) )
+    {
+        p_sys->i_mode = DEINTERLACE_YADIF;
+        p_sys->b_double_rate = false;
+        p_sys->b_half_height = false;
+    }
+    else if( !strcmp( psz_method, "yadif2x" ) )
+    {
+        p_sys->i_mode = DEINTERLACE_YADIF2X;
+        p_sys->b_double_rate = true;
+        p_sys->b_half_height = false;
+    }
     else
     {
-        const bool b_i422 = p_vout->render.i_chroma == VLC_CODEC_I422;
+        const bool b_i422 = p_vout->render.i_chroma == VLC_CODEC_I422 ||
+                            p_vout->render.i_chroma == VLC_CODEC_J422;
         if( strcmp( psz_method, "discard" ) )
             msg_Err( p_vout, "no valid deinterlace mode provided, "
                      "using \"discard\"" );
@@ -346,17 +368,21 @@ static void GetOutputFormat( vout_thread_t *p_vout,
         p_dst->i_sar_den *= 2;
     }
 
-    if( p_src->i_chroma == VLC_CODEC_I422 )
+    if( p_src->i_chroma == VLC_CODEC_I422 ||
+        p_src->i_chroma == VLC_CODEC_J422 )
     {
         switch( p_vout->p_sys->i_mode )
         {
         case DEINTERLACE_MEAN:
         case DEINTERLACE_LINEAR:
         case DEINTERLACE_X:
-            p_dst->i_chroma = VLC_CODEC_I422;
+        case DEINTERLACE_YADIF:
+        case DEINTERLACE_YADIF2X:
+            p_dst->i_chroma = p_src->i_chroma;
             break;
         default:
-            p_dst->i_chroma = VLC_CODEC_I420;
+            p_dst->i_chroma = p_src->i_chroma == VLC_CODEC_I422 ? VLC_CODEC_I420 :
+                                                                  VLC_CODEC_J420;
             break;
         }
     }
@@ -365,8 +391,10 @@ static void GetOutputFormat( vout_thread_t *p_vout,
 static bool IsChromaSupported( vlc_fourcc_t i_chroma )
 {
     return i_chroma == VLC_CODEC_I420 ||
+           i_chroma == VLC_CODEC_J420 ||
            i_chroma == VLC_CODEC_YV12 ||
-           i_chroma == VLC_CODEC_I422;
+           i_chroma == VLC_CODEC_I422 ||
+           i_chroma == VLC_CODEC_J422;
 }
 
 /*****************************************************************************
@@ -398,11 +426,14 @@ static int Init( vout_thread_t *p_vout )
         return VLC_EGENERIC;
     }
 
+    for( int i = 0; i < HISTORY_SIZE; i++ )
+        p_vout->p_sys->pp_history[i] = NULL;
+
     vout_filter_AllocateDirectBuffers( p_vout, VOUT_MAX_PICTURES );
 
     vout_filter_AddChild( p_vout, p_vout->p_sys->p_vout, MouseEvent );
 
-    var_AddCallback( p_vout, "deinterlace-mode", FilterCallback, NULL );
+    var_AddCallback( p_vout, "filter-deinterlace-mode", FilterCallback, NULL );
 
     return VLC_SUCCESS;
 }
@@ -427,7 +458,13 @@ static void End( vout_thread_t *p_vout )
 {
     vout_sys_t *p_sys = p_vout->p_sys;
 
-    var_DelCallback( p_vout, "deinterlace-mode", FilterCallback, NULL );
+    var_DelCallback( p_vout, "filter-deinterlace-mode", FilterCallback, NULL );
+
+    for( int i = 0; i < HISTORY_SIZE; i++ )
+    {
+        if( p_sys->pp_history[i] )
+            picture_Release( p_sys->pp_history[i] );
+    }
 
     if( p_sys->p_vout )
     {
@@ -592,6 +629,18 @@ static void Render ( vout_thread_t *p_vout, picture_t *p_pic )
             RenderX( pp_outpic[0], p_pic );
             vout_DisplayPicture( p_vout->p_sys->p_vout, pp_outpic[0] );
             break;
+
+        case DEINTERLACE_YADIF:
+            RenderYadif( p_vout, pp_outpic[0], p_pic, 0, 0 );
+            vout_DisplayPicture( p_vout->p_sys->p_vout, pp_outpic[0] );
+            break;
+
+        case DEINTERLACE_YADIF2X:
+            RenderYadif( p_vout, pp_outpic[0], p_pic, 0, p_pic->b_top_field_first ? 0 : 1 );
+            vout_DisplayPicture( p_vout->p_sys->p_vout, pp_outpic[0] );
+            RenderYadif( p_vout, pp_outpic[1], p_pic, 1, p_pic->b_top_field_first ? 1 : 0 );
+            vout_DisplayPicture( p_vout->p_sys->p_vout, pp_outpic[1] );
+            break;
     }
     vlc_mutex_unlock( &p_vout->p_sys->filter_lock );
 }
@@ -620,6 +669,7 @@ static void RenderDiscard( vout_thread_t *p_vout,
         switch( p_vout->render.i_chroma )
         {
         case VLC_CODEC_I420:
+        case VLC_CODEC_J420:
         case VLC_CODEC_YV12:
 
             for( ; p_out < p_out_end ; )
@@ -632,6 +682,7 @@ static void RenderDiscard( vout_thread_t *p_vout,
             break;
 
         case VLC_CODEC_I422:
+        case VLC_CODEC_J422:
 
             i_increment = 2 * p_pic->p[i_plane].i_pitch;
 
@@ -684,6 +735,7 @@ static void RenderBob( vout_thread_t *p_vout,
         switch( p_vout->render.i_chroma )
         {
             case VLC_CODEC_I420:
+            case VLC_CODEC_J420:
             case VLC_CODEC_YV12:
                 /* For BOTTOM field we need to add the first line */
                 if( i_field == 1 )
@@ -719,6 +771,7 @@ static void RenderBob( vout_thread_t *p_vout,
                 break;
 
             case VLC_CODEC_I422:
+            case VLC_CODEC_J422:
                 /* For BOTTOM field we need to add the first line */
                 if( i_field == 1 )
                 {
@@ -873,6 +926,7 @@ static void RenderBlend( vout_thread_t *p_vout,
         switch( p_vout->render.i_chroma )
         {
             case VLC_CODEC_I420:
+            case VLC_CODEC_J420:
             case VLC_CODEC_YV12:
                 /* First line: simple copy */
                 vlc_memcpy( p_out, p_in, p_pic->p[i_plane].i_pitch );
@@ -890,6 +944,7 @@ static void RenderBlend( vout_thread_t *p_vout,
                 break;
 
             case VLC_CODEC_I422:
+            case VLC_CODEC_J422:
                 /* First line: simple copy */
                 vlc_memcpy( p_out, p_in, p_pic->p[i_plane].i_pitch );
                 p_out += p_outpic->p[i_plane].i_pitch;
@@ -1741,6 +1796,126 @@ static void RenderX( picture_t *p_outpic, picture_t *p_pic )
 }
 
 /*****************************************************************************
+ * Yadif (Yet Another DeInterlacing Filter).
+ *****************************************************************************/
+/* */
+struct vf_priv_s {
+    /*
+     * 0: Output 1 frame for each frame.
+     * 1: Output 1 frame for each field.
+     * 2: Like 0 but skips spatial interlacing check.
+     * 3: Like 1 but skips spatial interlacing check.
+     *
+     * In vlc, only & 0x02 has meaning, as we do the & 0x01 ourself.
+     */
+    int mode;
+};
+
+/* I am unsure it is the right one */
+typedef intptr_t x86_reg;
+
+#define FFABS(a) ((a) >= 0 ? (a) : (-(a)))
+#define FFMAX(a,b)      __MAX(a,b)
+#define FFMAX3(a,b,c)   FFMAX(FFMAX(a,b),c)
+#define FFMIN(a,b)      __MIN(a,b)
+#define FFMIN3(a,b,c)   FFMIN(FFMIN(a,b),c)
+
+/* yadif.h comes from vf_yadif.c of mplayer project */
+#include "yadif.h"
+
+static void RenderYadif( vout_thread_t *p_vout, picture_t *p_dst, picture_t *p_src, int i_order, int i_field )
+{
+    vout_sys_t *p_sys = p_vout->p_sys;
+
+    /* */
+    assert( i_order == 0 || i_order == 1 );
+    assert( i_field == 0 || i_field == 1 );
+
+    if( i_order == 0 )
+    {
+        /* Duplicate the picture
+         * TODO when the vout rework is finished, picture_Hold() might be enough
+         * but becarefull, the pitches must match */
+        picture_t *p_dup = picture_NewFromFormat( &p_src->format );
+        if( p_dup )
+            picture_Copy( p_dup, p_src );
+
+        /* Slide the history */
+        if( p_sys->pp_history[0] )
+            picture_Release( p_sys->pp_history[0]  );
+        for( int i = 1; i < HISTORY_SIZE; i++ )
+            p_sys->pp_history[i-1] = p_sys->pp_history[i];
+        p_sys->pp_history[HISTORY_SIZE-1] = p_dup;
+    }
+
+    /* As the pitches must match, use ONLY pictures coming from picture_New()! */
+    picture_t *p_prev = p_sys->pp_history[0];
+    picture_t *p_cur  = p_sys->pp_history[1];
+    picture_t *p_next = p_sys->pp_history[2];
+
+    /* Filter if we have all the pictures we need */
+    if( p_prev && p_cur && p_next )
+    {
+        /* */
+        void (*filter)(struct vf_priv_s *p, uint8_t *dst, uint8_t *prev, uint8_t *cur, uint8_t *next, int w, int refs, int parity);
+#if defined(HAVE_YADIF_SSE2)
+        if( vlc_CPU() & CPU_CAPABILITY_SSE2 )
+            filter = yadif_filter_line_mmx2;
+        else
+#endif
+            filter = yadif_filter_line_c;
+
+        for( int n = 0; n < p_dst->i_planes; n++ )
+        {
+            const plane_t *prevp = &p_prev->p[n];
+            const plane_t *curp  = &p_cur->p[n];
+            const plane_t *nextp = &p_next->p[n];
+            plane_t *dstp        = &p_dst->p[n];
+
+            for( int y = 1; y < dstp->i_visible_lines - 1; y++ )
+            {
+                if( (y % 2) == i_field )
+                {
+                    vlc_memcpy( &dstp->p_pixels[y * dstp->i_pitch],
+                                &curp->p_pixels[y * curp->i_pitch], dstp->i_visible_pitch );
+                }
+                else
+                {
+                    struct vf_priv_s cfg;
+                    /* Spatial checks only when enough data */
+                    cfg.mode = (y >= 2 && y < dstp->i_visible_lines - 2) ? 0 : 2;
+
+                    assert( prevp->i_pitch == curp->i_pitch && curp->i_pitch == nextp->i_pitch );
+                    filter( &cfg,
+                            &dstp->p_pixels[y * dstp->i_pitch],
+                            &prevp->p_pixels[y * prevp->i_pitch],
+                            &curp->p_pixels[y * curp->i_pitch],
+                            &nextp->p_pixels[y * nextp->i_pitch],
+                            dstp->i_visible_pitch,
+                            curp->i_pitch,
+                            (i_field ^ (i_order == i_field)) & 1 );
+                }
+
+                /* We duplicate the first and last lines */
+                if( y == 1 )
+                    vlc_memcpy(&dstp->p_pixels[(y-1) * dstp->i_pitch], &dstp->p_pixels[y * dstp->i_pitch], dstp->i_pitch);
+                else if( y == dstp->i_visible_lines - 2 )
+                    vlc_memcpy(&dstp->p_pixels[(y+1) * dstp->i_pitch], &dstp->p_pixels[y * dstp->i_pitch], dstp->i_pitch);
+            }
+        }
+
+        /* */
+        p_dst->date = (p_next->date - p_cur->date) * i_order / 2 + p_cur->date;
+    }
+    else
+    {
+        /* Fallback to something simple
+         * XXX it is wrong when we have 2 pictures, we should not output a picture */
+        RenderX( p_dst, p_src );
+    }
+}
+
+/*****************************************************************************
  * FilterCallback: called when changing the deinterlace method on the fly.
  *****************************************************************************/
 static int FilterCallback( vlc_object_t *p_this, char const *psz_cmd,
@@ -1839,6 +2014,18 @@ static picture_t *Deinterlace( filter_t *p_filter, picture_t *p_pic )
         case DEINTERLACE_X:
             RenderX( p_pic_dst, p_pic );
             break;
+
+        case DEINTERLACE_YADIF:
+            msg_Err( p_vout, "delaying frames is not supported yet" );
+            picture_Release( p_pic_dst );
+            picture_Release( p_pic );
+            return NULL;
+
+        case DEINTERLACE_YADIF2X:
+            msg_Err( p_vout, "doubling the frame rate is not supported yet" );
+            picture_Release( p_pic_dst );
+            picture_Release( p_pic );
+            return NULL;
     }
 
     picture_CopyProperties( p_pic_dst, p_pic );
@@ -1871,8 +2058,8 @@ static int OpenFilter( vlc_object_t *p_this )
                    p_filter->p_cfg );
     var_Get( p_filter, FILTER_CFG_PREFIX "mode", &val );
 
-    var_Create( p_filter, "deinterlace-mode", VLC_VAR_STRING );
-    var_Set( p_filter, "deinterlace-mode", val );
+    var_Create( p_filter, "filter-deinterlace-mode", VLC_VAR_STRING );
+    var_Set( p_filter, "filter-deinterlace-mode", val );
     free( val.psz_string );
 
     if( Create( VLC_OBJECT(p_vout) ) != VLC_SUCCESS )

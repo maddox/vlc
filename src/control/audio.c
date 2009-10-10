@@ -313,24 +313,19 @@ void libvlc_audio_output_set_device_type( libvlc_instance_t *p_instance,
 /*****************************************************************************
  * libvlc_audio_get_mute : Get the volume state, true if muted
  *****************************************************************************/
-void libvlc_audio_toggle_mute( libvlc_instance_t *p_instance,
-                               libvlc_exception_t *p_e )
+void libvlc_audio_toggle_mute( libvlc_instance_t *p_instance )
 {
-    VLC_UNUSED(p_e);
-
     aout_ToggleMute( p_instance->p_libvlc_int, NULL );
 }
 
-int libvlc_audio_get_mute( libvlc_instance_t *p_instance,
-                           libvlc_exception_t *p_e )
+int libvlc_audio_get_mute( libvlc_instance_t *p_instance )
 {
-    return (libvlc_audio_get_volume(p_instance, p_e) == 0);
+    return (libvlc_audio_get_volume(p_instance) == 0);
 }
 
-void libvlc_audio_set_mute( libvlc_instance_t *p_instance, int mute,
-                            libvlc_exception_t *p_e )
+void libvlc_audio_set_mute( libvlc_instance_t *p_instance, int mute )
 {
-    if ( mute ^ libvlc_audio_get_mute( p_instance, p_e ) )
+    if ( !mute != !libvlc_audio_get_mute( p_instance ) )
     {
         aout_ToggleMute( p_instance->p_libvlc_int, NULL );
     }
@@ -339,11 +334,8 @@ void libvlc_audio_set_mute( libvlc_instance_t *p_instance, int mute,
 /*****************************************************************************
  * libvlc_audio_get_volume : Get the current volume (range 0-200 %)
  *****************************************************************************/
-int libvlc_audio_get_volume( libvlc_instance_t *p_instance,
-                             libvlc_exception_t *p_e )
+int libvlc_audio_get_volume( libvlc_instance_t *p_instance )
 {
-    VLC_UNUSED(p_e);
-
     audio_volume_t i_volume;
 
     aout_VolumeGet( p_instance->p_libvlc_int, &i_volume );
@@ -409,19 +401,17 @@ int libvlc_audio_get_track( libvlc_media_player_t *p_mi,
     vlc_value_t val_list;
     vlc_value_t val;
     int i_track = -1;
-    int i_ret = -1;
     int i;
 
     if( !p_input_thread )
         return -1;
 
-    i_ret = var_Get( p_input_thread, "audio-es", &val );
-    if( i_ret < 0 )
+    if( var_Get( p_input_thread, "audio-es", &val ) < 0 )
     {
         vlc_object_release( p_input_thread );
         libvlc_exception_raise( p_e );
         libvlc_printerr( "Audio track information not found" );
-        return i_ret;
+        return -1;
     }
 
     var_Change( p_input_thread, "audio-es", VLC_VAR_GETCHOICES, &val_list, NULL );
