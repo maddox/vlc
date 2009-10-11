@@ -1,0 +1,7 @@
+cd projects/macosx/framework
+rm -rf build
+mkdir build
+cd build
+ln -s ../../../.. vlc_build_dir
+cd ..
+xcodebuild -target VLCKit

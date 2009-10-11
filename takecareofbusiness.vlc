@@ -2,8 +2,10 @@ cd extras/contrib
 rm -rf tmp
 ./bootstrap
 make
+cd src
+make .iconv
 
-cd ../..
+cd ../../..
 ./boostrap
 export CC=/Developer/usr/bin/llvm-gcc-4.2
 export CXX=/Developer/usr/bin/llvm-g++-4.2
@@ -15,3 +17,5 @@ export LDFLAGS="-arch i386"
 ./configure
 make
 make VLC-release.app
+
+./takecareofbusiness.vlckit
