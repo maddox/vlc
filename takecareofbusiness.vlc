@@ -17,5 +17,3 @@ export LDFLAGS="-arch i386"
 ./configure
 make
 make VLC-release.app
-
-./takecareofbusiness.vlckit
