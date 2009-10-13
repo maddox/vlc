@@ -234,13 +234,6 @@ static void HandleMediaInstanceStateChanged(const libvlc_event_t * event, void *
     libvlc_exception_t ex;
     libvlc_exception_init( &ex );
     libvlc_media_player_set_nsobject(instance, aDrawable, &ex);
-
-    if (aDrawable) {
-        libvlc_instance_t *p_instance = (libvlc_instance_t *)[VLCLibrary sharedInstance];
-        var_Create(p_instance->p_libvlc_int, "drawable-gl", VLC_VAR_INTEGER);
-        var_SetInteger(p_instance->p_libvlc_int, "drawable-gl", (int)aDrawable);
-    }
-    
     catch_exception( &ex );
 }
 
