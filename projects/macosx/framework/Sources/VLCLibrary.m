@@ -88,6 +88,7 @@ void * DestroySharedLibraryAtExit( void )
         const char * lib_vlc_params[] = { 
             "-I", "dummy", "--vout=opengllayer",
             "--spdif",
+            "-vvv",
             "--no-video-title-show",
             //"--no-sout-keep",
             "--ignore-config",
